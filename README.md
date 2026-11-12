@@ -86,6 +86,22 @@ tests/                  pytest: парсер nmap, сравнение скано
 
 Рассчитано на Ubuntu Server 22.04/24.04. Нужен доступ ВМ в интернет к целям сканирования (а также к `vulners.com`, `crt.sh`, WHOIS-серверам — см. [ограничения](#ограничения-и-замечания)).
 
+### Быстрый способ
+
+```bash
+sudo apt-get update && sudo apt-get install -y git
+sudo mkdir -p /opt/perimeter-scanner && sudo chown "$USER" /opt/perimeter-scanner
+git clone <адрес репозитория> /opt/perimeter-scanner
+cd /opt/perimeter-scanner
+./install.sh
+```
+
+Скрипт `install.sh` установит Docker (если его нет), создаст `.env` со случайным `SECRET_KEY` и паролем администратора (пароль будет показан один раз), создаст пустой `targets.yaml`, соберёт образ, запустит контейнер и дождётся его готовности. Повторный запуск безопасен: существующие `.env` и `targets.yaml` не изменяются. Свой пароль можно задать заранее: `PS_ADMIN_PASSWORD='...' ./install.sh`.
+
+После этого переходите к разделам [«Первый запуск»](#первый-запуск) (шаги после входа) и [«Публикация во внутренней сети»](#публикация-во-внутренней-сети-reverse-proxy--https).
+
+### Вручную
+
 1. Установите Docker Engine и плагин compose (официальный репозиторий Docker):
 
    ```bash
@@ -313,6 +329,8 @@ docker compose start app
 - Секреты — только в `.env`; `.env`, `targets.yaml`, база и отчёты исключены из git (`.gitignore`), в репозитории — `.env.example` и `targets.example.yaml` с адресами из документационных диапазонов.
 
 ## Разработка и тесты
+
+При каждом pull request и изменении `main` GitHub Actions прогоняет тесты, собирает Docker-образ, запускает приложение через `install.sh` и проверяет его в контейнере: работу nmap с выданными правами, отсутствие запрещённых категорий скриптов, экспорт PDF, вход и реальный быстрый скан.
 
 ```bash
 python3.12 -m venv .venv
