@@ -68,7 +68,7 @@ jobs:
           ./install.sh > /tmp/second-run.log
           test "$FP" = "$(sudo openssl x509 -in /etc/ssl/perimeter-scanner/fullchain.pem -noout -fingerprint)"
           curl -kfsS https://127.0.0.1/healthz
-          ! grep -q 'Пароль администратора' /tmp/second-run.log
+          if grep -q 'Пароль администратора' /tmp/second-run.log; then echo 'пароль сгенерирован повторно'; exit 1; fi
       - name: Контейнер работает не от root, файловая система только для чтения
         run: |
           test "$(docker compose exec -T app id -u)" = "10001"
