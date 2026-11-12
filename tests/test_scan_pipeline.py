@@ -149,3 +149,20 @@ def test_new_columns_are_added_to_existing_db(tmp_path) -> None:
         pcols = {r[1] for r in c.exec_driver_sql("PRAGMA table_info(ports)")}
     assert "extra" in cols and "reason" in pcols
     _ = sqlite3
+
+
+def test_pdf_export_does_not_flood_logs(caplog) -> None:
+    import logging
+
+    from app.models import utcnow as now
+    from app.reports.exporters import to_pdf
+
+    report = {"kind": "perimeter", "title": "Тест", "generated_at": now(), "top_findings": [], "assets": [], "findings": [],
+              "changes": [], "trend": [],
+              "summary": {"targets": 0, "hosts": 0, "open_ports": 0, "domains": 0, "findings": 0, "counts": {},
+                          "risk": {"index": 0, "level": "low", "label": "Низкий"}, "last_scan_id": None, "last_scan_at": None}}
+    with caplog.at_level(logging.DEBUG):
+        assert to_pdf(report)[:4] == b"%PDF"
+        assert to_pdf(report)[:4] == b"%PDF"
+    noisy = [r for r in caplog.records if r.name.startswith(("fontTools", "weasyprint")) and r.levelno < logging.WARNING]
+    assert noisy == []

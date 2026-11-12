@@ -63,11 +63,27 @@ def to_html(report: dict[str, Any]) -> bytes:
     return template.render(report=report, r=report).encode("utf-8")
 
 
+def _quiet_pdf_loggers() -> None:
+    """WeasyPrint и fontTools очень многословны на уровнях DEBUG/INFO — оставляем только предупреждения.
+
+    Уровень выставляется каждому логгеру семейства явно: часть из них получает
+    собственный уровень при импорте, и настройка родителя на них не действует.
+    """
+    import logging
+
+    for name in list(logging.root.manager.loggerDict):
+        if name.split(".")[0] in ("fontTools", "weasyprint"):
+            logging.getLogger(name).setLevel(logging.WARNING)
+    for name in ("fontTools", "weasyprint"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
 def to_pdf(report: dict[str, Any]) -> bytes:
     try:
         from weasyprint import HTML
     except (ImportError, OSError) as exc:  # нет системных библиотек pango/cairo
         raise RuntimeError("Экспорт в PDF недоступен: не установлены библиотеки WeasyPrint") from exc
+    _quiet_pdf_loggers()
     html = to_html(report).decode("utf-8")
     def _no_fetch(url: str, *args: Any, **kwargs: Any) -> dict:
         raise ValueError(f"Загрузка внешних ресурсов запрещена: {url}")
