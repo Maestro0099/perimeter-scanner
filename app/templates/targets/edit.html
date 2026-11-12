@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import csrf_input %}
+{% block title %}Цель {{ target.value }}{% endblock %}
+{% block content %}
+<form method="post" action="/targets/{{ target.id }}/edit" class="card mx-auto max-w-xl">
+  {{ csrf_input(request) }}
+  <div class="card-header"><h2 class="font-mono">{{ target.value }}</h2><span class="badge-neutral">{{ KIND_LABELS[target.kind] }}</span></div>
+  <div class="card-body space-y-4">
+    <div>
+      <label class="label" for="group_id">Группа</label>
+      <select id="group_id" name="group_id" class="input">
+        <option value="">— без группы —</option>
+        {% for g in groups %}<option value="{{ g.id }}" {{ 'selected' if g.id == target.group_id }}>{{ g.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="label" for="tags">Теги</label>
+      <input id="tags" name="tags" class="input" value="{{ target.tag_names|join(', ') }}" maxlength="500">
+    </div>
+    <div>
+      <label class="label" for="description">Описание</label>
+      <input id="description" name="description" class="input" value="{{ target.description }}" maxlength="1000">
+    </div>
+    <label class="flex items-center gap-2 text-sm">
+      <input type="checkbox" name="approved" class="checkbox" {{ 'checked' if target.approved }}>
+      Цель утверждена для сканирования
+    </label>
+    <div class="flex justify-end gap-2">
+      <a href="/targets" class="btn-secondary">Отмена</a>
+      <button class="btn-primary">Сохранить</button>
+    </div>
+  </div>
+</form>
+{% endblock %}

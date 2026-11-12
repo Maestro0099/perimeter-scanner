@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Дашборд{% endblock %}
+{% block content %}
+<div class="grid gap-4 sm:grid-cols-3">
+  {% for k, l in KIND_LABELS.items() %}
+  <div class="card card-body"><div class="stat-label">{{ l }}</div><div class="stat-value">{{ counts.get(k, 0) }}</div></div>
+  {% endfor %}
+</div>
+{% endblock %}

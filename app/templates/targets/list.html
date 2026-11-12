@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon, flash, empty_row, csrf_input %}
+{% block title %}Цели{% endblock %}
+{% block content %}
+{{ flash(msg, err) }}
+<div class="grid gap-6 xl:grid-cols-3">
+  <div class="space-y-6 xl:col-span-2">
+    <div class="card" data-table-wrap>
+      <div class="card-header">
+        <div>
+          <h2>Утверждённый список целей</h2>
+          <p class="text-xs muted">Сканирование возможно только по этим целям</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <input type="search" data-table-search class="input w-48" placeholder="Поиск…" aria-label="Поиск">
+          <select data-table-filter="kind" class="input w-auto" aria-label="Тип">
+            <option value="">Все типы</option>
+            {% for k, l in KIND_LABELS.items() %}<option value="{{ k }}">{{ l }}</option>{% endfor %}
+          </select>
+          <select data-table-filter="group" class="input w-auto" aria-label="Группа">
+            <option value="">Все группы</option>
+            {% for g in groups %}<option value="g{{ g.id }}">{{ g.name }}</option>{% endfor %}
+            <option value="g0">Без группы</option>
+          </select>
+          {% if tags %}
+          <select data-table-filter="tags" class="input w-auto" aria-label="Тег">
+            <option value="">Все теги</option>
+            {% for t in tags %}<option value="{{ t.name }}">#{{ t.name }}</option>{% endfor %}
+          </select>
+          {% endif %}
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table" data-table>
+          <thead><tr>
+            <th data-sort>Цель</th><th data-sort>Тип</th><th data-sort>Группа</th><th>Теги</th><th data-sort>Статус</th><th data-sort>Добавлена</th>
+            {% if user.is_admin %}<th class="text-right">Действия</th>{% endif %}
+          </tr></thead>
+          <tbody>
+          {% for t in targets %}
+            <tr data-kind="{{ t.kind }}" data-group="g{{ t.group_id or 0 }}" data-tags="{{ t.tag_names|join(' ') }}">
+              <td>
+                {% if t.kind == 'domain' %}<a href="/assets/domain/{{ t.value }}" class="font-medium">{{ t.value }}</a>
+                {% elif t.kind == 'ip' %}<a href="/assets/ip/{{ t.value }}" class="font-mono font-medium">{{ t.value }}</a>
+                {% else %}<span class="font-mono font-medium">{{ t.value }}</span>{% endif %}
+                {% if t.description %}<div class="text-xs muted">{{ t.description }}</div>{% endif %}
+              </td>
+              <td><span class="badge-neutral">{{ KIND_LABELS[t.kind] }}</span></td>
+              <td>{{ t.group.name if t.group else '—' }}</td>
+              <td>{% for tg in t.tag_names %}<span class="badge-indigo mr-1">#{{ tg }}</span>{% endfor %}</td>
+              <td data-value="{{ 1 if t.approved else 0 }}">{% if t.approved %}<span class="badge-green">Утверждена</span>{% else %}<span class="sev-medium">Не утверждена</span>{% endif %}</td>
+              <td class="whitespace-nowrap text-xs muted" data-value="{{ t.created_at.isoformat() }}">{{ t.created_at|dt }}</td>
+              {% if user.is_admin %}
+              <td class="whitespace-nowrap text-right">
+                <a href="/targets/{{ t.id }}/edit" class="btn-ghost btn-sm">Изменить</a>
+                <form method="post" action="/targets/{{ t.id }}/delete" class="inline" data-confirm-submit="Удалить цель {{ t.value }}? История сканов сохранится.">
+                  {{ csrf_input(request) }}<button class="btn-ghost btn-sm text-red-600" aria-label="Удалить">{{ icon('trash', 'h-4 w-4') }}</button>
+                </form>
+              </td>
+              {% endif %}
+            </tr>
+          {% else %}
+            {{ empty_row(7, "Целей пока нет. Добавьте IP-адреса, подсети или домены организации.") }}
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="border-t border-slate-200 px-4 py-2 text-xs muted dark:border-slate-800">Показано: <span data-table-count>0</span> из {{ targets|length }}</div>
+    </div>
+  </div>
+
+  <div class="space-y-6">
+    {% if user.is_admin %}
+    <form method="post" action="/targets" class="card">
+      {{ csrf_input(request) }}
+      <div class="card-header"><h2>Добавить цели</h2></div>
+      <div class="card-body space-y-3">
+        <div>
+          <label class="label" for="values">IP, подсети CIDR или домены</label>
+          <textarea id="values" name="values" rows="4" class="input font-mono" required placeholder="203.0.113.10&#10;198.51.100.0/28&#10;example.com"></textarea>
+          <p class="mt-1 text-xs muted">По одной цели в строке. Добавляйте только ресурсы своей организации.</p>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label" for="group_id">Группа</label>
+            <select id="group_id" name="group_id" class="input">
+              <option value="">— без группы —</option>
+              {% for g in groups %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="label" for="new_group">или новая</label>
+            <input id="new_group" name="new_group" class="input" maxlength="100" placeholder="Название">
+          </div>
+        </div>
+        <div>
+          <label class="label" for="tags">Теги</label>
+          <input id="tags" name="tags" class="input" maxlength="500" placeholder="web, prod">
+        </div>
+        <div>
+          <label class="label" for="description">Описание</label>
+          <input id="description" name="description" class="input" maxlength="1000">
+        </div>
+        <button class="btn-primary w-full">{{ icon('plus', 'h-4 w-4') }} Добавить</button>
+      </div>
+    </form>
+
+    <form method="post" action="/targets/import" enctype="multipart/form-data" class="card">
+      {{ csrf_input(request) }}
+      <div class="card-header"><h2>Импорт из targets.yaml</h2></div>
+      <div class="card-body space-y-3">
+        <input type="file" name="file" accept=".yaml,.yml" required class="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium dark:file:bg-slate-800 dark:file:text-slate-200">
+        <p class="text-xs muted">Формат — см. targets.example.yaml. Файл <code>targets.yaml</code> рядом с приложением также импортируется при запуске.</p>
+        <button class="btn-secondary w-full">{{ icon('upload', 'h-4 w-4') }} Импортировать</button>
+      </div>
+    </form>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header"><h2>Группы</h2></div>
+      <ul class="divide-y divide-slate-100 dark:divide-slate-800">
+        {% for g in groups %}
+        <li class="flex items-center justify-between gap-2 px-4 py-2.5">
+          <div class="min-w-0">
+            <a href="/targets?group={{ g.id }}" class="text-sm font-medium">{{ g.name }}</a>
+            <div class="text-xs muted">{{ g.targets|length }} {{ plural(g.targets|length, 'цель', 'цели', 'целей') }}{% if g.description %} · {{ g.description }}{% endif %}</div>
+          </div>
+          {% if user.is_admin %}
+          <form method="post" action="/groups/{{ g.id }}/delete" data-confirm-submit="Удалить группу «{{ g.name }}»? Цели останутся без группы.">
+            {{ csrf_input(request) }}<button class="btn-ghost btn-sm text-red-600" aria-label="Удалить группу">{{ icon('trash', 'h-4 w-4') }}</button>
+          </form>
+          {% endif %}
+        </li>
+        {% else %}
+        <li class="px-4 py-6 text-center text-sm muted">Групп пока нет</li>
+        {% endfor %}
+      </ul>
+      {% if user.is_admin %}
+      <form method="post" action="/groups" class="flex gap-2 border-t border-slate-200 p-3 dark:border-slate-800">
+        {{ csrf_input(request) }}
+        <input name="name" class="input" placeholder="Новая группа" maxlength="100" required>
+        <button class="btn-secondary">{{ icon('plus', 'h-4 w-4') }}</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
