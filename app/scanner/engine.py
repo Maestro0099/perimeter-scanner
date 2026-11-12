@@ -46,7 +46,6 @@ def create_scan(
     group_id: int | None = None,
     aggressive_confirmed: bool = False,
 ) -> Scan:
-    s = get_settings()
     prof = PROFILES.get(profile)
     if prof is None:
         raise ScanRequestError("Неизвестный профиль сканирования")
@@ -55,7 +54,9 @@ def create_scan(
     if prof.manual_only and not aggressive_confirmed:
         raise ScanRequestError(f"Для профиля «{prof.title}» требуется явное подтверждение")
     try:
-        timing_v = validate_timing(timing if timing is not None else s.nmap_timing)
+        from app import app_settings
+
+        timing_v = validate_timing(timing if timing is not None else app_settings.load(db).nmap_timing)
     except ValidationError as exc:
         raise ScanRequestError(str(exc)) from exc
     if not target_ids:
@@ -94,16 +95,44 @@ def create_scan(
 
 
 class ScanManager:
+    """Очередь сканов. Число одновременно выполняющихся сканов ограничено настройкой
+    max_parallel_scans (меняется в интерфейсе без перезапуска)."""
+
+    POOL_SIZE = 16
+
     def __init__(self) -> None:
         self._executor: ThreadPoolExecutor | None = None
         self._cancel: dict[int, threading.Event] = {}
         self._lock = threading.Lock()
+        self._slots = threading.Condition()
+        self._running = 0
+
+    def _limit(self) -> int:
+        from app import app_settings
+
+        try:
+            return app_settings.load().max_parallel_scans
+        except Exception:  # noqa: BLE001
+            return get_settings().max_parallel_scans
+
+    def _acquire(self, cancel: threading.Event) -> bool:
+        with self._slots:
+            while self._running >= self._limit():
+                if cancel.is_set():
+                    return False
+                self._slots.wait(timeout=2.0)
+            self._running += 1
+            return True
+
+    def _release(self) -> None:
+        with self._slots:
+            self._running -= 1
+            self._slots.notify_all()
 
     def start(self) -> None:
         if self._executor is not None:
             return
-        s = get_settings()
-        self._executor = ThreadPoolExecutor(max_workers=s.max_parallel_scans, thread_name_prefix="scan")
+        self._executor = ThreadPoolExecutor(max_workers=self.POOL_SIZE, thread_name_prefix="scan")
         with session_scope() as db:
             # сканы, прерванные перезапуском приложения
             db.execute(
@@ -148,14 +177,25 @@ class ScanManager:
     def _run_safe(self, scan_id: int) -> None:
         with self._lock:
             cancel = self._cancel.setdefault(scan_id, threading.Event())
+        if not self._acquire(cancel):
+            with self._lock:
+                self._cancel.pop(scan_id, None)
+            return
         try:
             ScanJob(scan_id, cancel).run()
         except Exception:  # noqa: BLE001
             log.exception("Необработанная ошибка в скане #%s", scan_id)
             _finish(scan_id, ScanStatus.FAILED, "Внутренняя ошибка, подробности в журнале приложения")
         finally:
+            self._release()
             with self._lock:
                 self._cancel.pop(scan_id, None)
+            try:
+                from app.notify.dispatcher import notify_scan
+
+                notify_scan(scan_id)
+            except Exception:  # noqa: BLE001
+                log.exception("Ошибка отправки уведомлений по скану #%s", scan_id)
 
 
 scan_manager = ScanManager()

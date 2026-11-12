@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon, flash, csrf_input %}
+{% block title %}Расписание{% endblock %}
+{% block content %}
+{{ flash(msg, err) }}
+<datalist id="cron-presets">{% for c, l in presets %}<option value="{{ c }}">{{ l }}</option>{% endfor %}</datalist>
+<div class="grid gap-6 xl:grid-cols-3">
+  <div class="card xl:col-span-2">
+    <div class="card-header"><h2>Регулярные сканирования</h2><span class="text-xs muted">Время — по часовому поясу TIMEZONE из .env</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Группа</th><th>Профиль</th><th>Расписание (cron)</th><th>Последний / следующий запуск</th><th></th></tr></thead>
+        <tbody>
+        {% for s in schedules %}
+          <tr>
+            <td class="font-medium"><a href="/targets?group={{ s.group_id }}">{{ s.group.name }}</a><div class="text-xs muted">{{ s.group.targets|length }} {{ plural(s.group.targets|length, 'цель', 'цели', 'целей') }}</div></td>
+            <td><span class="badge-neutral">{{ PROFILE_LABELS.get(s.profile) }}</span></td>
+            <td colspan="2">
+              <form method="post" action="/schedules/{{ s.id }}/update" class="flex flex-wrap items-center gap-2">
+                {{ csrf_input(request) }}
+                <input name="cron" value="{{ s.cron }}" list="cron-presets" class="input w-36 font-mono" required maxlength="100" aria-label="Cron">
+                <label class="flex items-center gap-1 text-xs"><input type="checkbox" name="enabled" class="checkbox" {{ 'checked' if s.enabled }}> включено</label>
+                <button class="btn-secondary btn-sm">Сохранить</button>
+                <span class="text-xs muted">{{ s.last_run|dt }} → {% if s.enabled and next_runs[s.id] %}<b class="text-slate-700 dark:text-slate-200">{{ next_runs[s.id]|dt }}</b>{% else %}—{% endif %}</span>
+              </form>
+            </td>
+            <td class="whitespace-nowrap text-right">
+              <form method="post" action="/schedules/{{ s.id }}/run" class="inline" data-confirm-submit="Запустить сканирование группы «{{ s.group.name }}» сейчас?">{{ csrf_input(request) }}<button class="btn-ghost btn-sm" title="Запустить сейчас">{{ icon('play', 'h-4 w-4') }}</button></form>
+              <form method="post" action="/schedules/{{ s.id }}/delete" class="inline" data-confirm-submit="Удалить расписание?">{{ csrf_input(request) }}<button class="btn-ghost btn-sm text-red-600" aria-label="Удалить">{{ icon('trash', 'h-4 w-4') }}</button></form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" class="py-10 text-center text-sm muted">Расписаний нет</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <form method="post" action="/schedules" class="card">
+    {{ csrf_input(request) }}
+    <div class="card-header"><h2>Новое расписание</h2></div>
+    <div class="card-body space-y-3">
+      <div><label class="label" for="g">Группа целей</label>
+        <select id="g" name="group_id" class="input" required>{% for g in groups %}<option value="{{ g.id }}">{{ g.name }}</option>{% else %}<option value="" disabled>Сначала создайте группу</option>{% endfor %}</select></div>
+      <div><label class="label" for="p">Профиль</label>
+        <select id="p" name="profile" class="input">{% for k, p in profiles.items() %}<option value="{{ k }}">{{ p.title }}</option>{% endfor %}</select>
+        <p class="mt-1 text-xs muted">Агрессивный профиль по расписанию запускать нельзя.</p></div>
+      <div><label class="label" for="c">Cron (минута час день месяц день_недели)</label>
+        <input id="c" name="cron" list="cron-presets" class="input font-mono" value="0 3 * * *" required maxlength="100">
+        <ul class="mt-1 space-y-0.5 text-xs muted">{% for c, l in presets %}<li><code>{{ c }}</code> — {{ l }}</li>{% endfor %}</ul></div>
+      <button class="btn-primary w-full" {{ 'disabled' if not groups }}>{{ icon('clock', 'h-4 w-4') }} Создать</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
