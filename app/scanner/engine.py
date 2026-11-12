@@ -226,9 +226,12 @@ class ScanJob:
         try:
             if not targets:
                 raise ScanRequestError("Нет утверждённых целей для сканирования")
-            hosts = self.run_nmap(targets, profile, timing, 0, 95)
+            hosts = self.run_nmap(targets, profile, timing, 0, 70)
             self.check_cancel()
             self.store_nmap(hosts, targets)
+            self.progress("Проверки доменов, веба и TLS", 70, force=True)
+            self.run_checks(targets, profile)
+            self.check_cancel()
             self.progress("Сравнение с предыдущим сканом", 97, force=True)
             self.finalize()
         except NmapCancelled:
@@ -240,6 +243,14 @@ class ScanJob:
             return
         _finish(self.scan_id, ScanStatus.DONE)
         log.info("Скан #%s завершён", self.scan_id)
+
+    def run_checks(self, targets: list[tuple[int, str, str]], profile: str) -> None:
+        from app.checks.runner import ChecksRunner
+
+        runner = ChecksRunner(self.scan_id, profile, self.cancel, self.scaled(70, 96))
+        findings = runner.run(targets)
+        with session_scope() as db:
+            save_findings(db, self.scan_id, findings, domain_target_map(self.scan_id, targets, findings))
 
     def finalize(self) -> None:
         """Сравнение с предыдущими сканами и сводка."""
@@ -356,7 +367,11 @@ class ScanJob:
 
 
 def save_findings(db: Session, scan_id: int, findings: list[FindingData], target_map: dict[str, int | None]) -> None:
+    seen: set[str] = set()
     for f in findings:
+        if f.fingerprint in seen:
+            continue
+        seen.add(f.fingerprint)
         db.add(
             Finding(
                 scan_id=scan_id,
@@ -400,6 +415,24 @@ def targets_by_asset(targets: list[tuple[int, str, str]], hosts: list[HostResult
     for h in hosts:
         m.setdefault(h.ip, match_target(h, targets))
     return m
+
+
+def domain_target_map(scan_id: int, targets: list[tuple[int, str, str]], findings: list[FindingData]) -> dict[str, int | None]:
+    """Сопоставление активов проверок (IP, домены, поддомены) с целями скана."""
+    from app.validation import is_subdomain_of
+
+    result: dict[str, int | None] = {}
+    domains = sorted(((tid, v) for tid, k, v in targets if k == TargetKind.DOMAIN.value), key=lambda x: -len(x[1]))
+    with session_scope() as db:
+        ip_map = {h.ip: h.target_id for h in db.scalars(select(Host).where(Host.scan_id == scan_id, Host.ip.in_({f.asset for f in findings})))}
+    for f in findings:
+        if f.asset in result:
+            continue
+        if f.asset_type == "domain":
+            result[f.asset] = next((tid for tid, v in domains if is_subdomain_of(f.asset, v)), None)
+        else:
+            result[f.asset] = ip_map.get(f.asset)
+    return result
 
 
 def scan_xml_path(scan_id: int) -> Path:

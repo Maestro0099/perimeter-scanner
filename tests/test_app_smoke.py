@@ -97,3 +97,45 @@ def test_viewer_cannot_modify(client: TestClient) -> None:
     token = _csrf(client, "/targets")
     r = client.post("/targets", data={"values": "203.0.113.11", "csrf_token": token})
     assert r.status_code == 403
+
+
+def test_pages_render_with_check_results(client: TestClient) -> None:
+    from app import db as dbmod
+    from app.models import DomainResult, Finding, Scan, Target, TlsResult, WebResult, utcnow
+
+    with dbmod.session_scope() as db:
+        t = Target(kind="domain", value="example.com")
+        db.add(t)
+        db.flush()
+        scan = Scan(profile="full", status="done", targets=[t], started_by="admin", finished_at=utcnow(), progress=100)
+        db.add(scan)
+        db.flush()
+        db.add(DomainResult(
+            scan_id=scan.id, target_id=t.id, domain="example.com",
+            records={"A": ["203.0.113.10"], "MX": ["10 mx.example.com"], "TXT": ["v=spf1 -all"]},
+            email_security={"spf": {"record": "v=spf1 -all", "issues": []}, "dmarc": {"record": "", "policy": "", "issues": ["DMARC-запись отсутствует"]}, "dkim": {"selectors": {}}},
+            zone_transfer={"ns1.example.com": {"allowed": True, "records": 12}},
+            whois={"domain": "example.com", "registrar": "Reg", "expires": "2030-01-01", "days_left": 1000},
+            subdomains=[{"name": "www.example.com", "ips": ["203.0.113.10"], "sources": ["crt.sh"], "resolves": True}],
+        ))
+        db.add(WebResult(scan_id=scan.id, asset="example.com", url="https://example.com/", status_code=200, title="Пример",
+                         security_headers={"content-security-policy": {"present": False, "value": ""}}, technologies=["nginx"]))
+        db.add(TlsResult(scan_id=scan.id, asset="example.com", host="example.com", port=443,
+                         certificate={"subject": "example.com", "issuer": "CA", "days_left": 5, "san": ["example.com"], "chain": []},
+                         chain_valid=True, protocols={"TLSv1.0": False, "TLSv1.2": True}, ciphers={"RC4": None, "NULL": False}))
+        db.add(Finding(scan_id=scan.id, target_id=t.id, asset="example.com", asset_type="domain", category="dns",
+                       severity="high", title="Разрешена передача зоны (AXFR)", fingerprint="dns|example.com|-|axfr"))
+        sid = scan.id
+    _login(client)
+    for path in (f"/scans/{sid}", "/assets/domain/example.com", "/assets/domain", "/findings", "/reports", "/",
+                 "/assets/domain/example.com/export.html", "/assets/domain/example.com/export.json"):
+        r = client.get(path)
+        assert r.status_code == 200, path
+    page = client.get("/assets/domain/example.com").text
+    assert "AXFR разрешён" in page and "www.example.com" in page and "не проверено: RC4" in page
+
+    token = _csrf(client, "/assets/domain/example.com")
+    r = client.post("/assets/domain/example.com/promote", data={"name": "www.example.com", "csrf_token": token}, follow_redirects=False)
+    assert r.status_code == 303
+    r = client.post("/assets/domain/example.com/promote", data={"name": "evil.org", "csrf_token": token})
+    assert r.status_code == 400

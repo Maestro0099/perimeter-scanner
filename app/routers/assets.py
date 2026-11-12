@@ -4,9 +4,15 @@ from __future__ import annotations
 
 import ipaddress
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import RedirectResponse, Response
+from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+from app.audit import audit
+from app.auth import client_ip, require_admin
+from app.models import Target
+from app.targets_service import create_or_update_target
 
 from app.analysis.state import asset_index
 from app.auth import current_user
@@ -15,7 +21,7 @@ from app.models import User, utcnow
 from app.reports.builder import domain_report, ip_report
 from app.routers.exports import export_response
 from app.templating import render
-from app.validation import ValidationError, normalize_domain
+from app.validation import ValidationError, is_subdomain_of, normalize_domain
 
 router = APIRouter()
 
@@ -82,3 +88,32 @@ def domain_export(
     if report is None:
         raise HTTPException(404, "Нет данных")
     return export_response(request, db, user, report, fmt, f"domain-{name}-{utcnow():%Y%m%d}")
+
+
+@router.post("/assets/domain/{name}/promote")
+def promote_subdomain(
+    request: Request,
+    name: str,
+    sub: str = Form("", alias="name"),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Добавить обнаруженный поддомен в утверждённые цели (только поддомены уже утверждённого домена)."""
+    parent = _check_domain(name)
+    try:
+        child = normalize_domain(sub)
+    except ValidationError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    parent_target = db.scalar(select(Target).where(Target.value == parent, Target.approved.is_(True)))
+    if parent_target is None or not is_subdomain_of(child, parent) or child == parent:
+        raise HTTPException(400, "Можно добавить только поддомен утверждённого домена")
+    try:
+        target, created = create_or_update_target(
+            db, child, group=parent_target.group, description=f"Поддомен {parent}", source="promoted",
+            created_by=user.username,
+        )
+    except ValidationError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    db.commit()
+    audit(db, "subdomain_promote", child, username=user.username, ip=client_ip(request))
+    return RedirectResponse(f"/assets/domain/{parent}", status_code=303)
