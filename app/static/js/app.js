@@ -147,6 +147,17 @@
     });
   });
 
+  // Подтверждение агрессивного профиля показывается только при его выборе
+  function syncProfile() {
+    var box = document.getElementById("aggressive-confirm");
+    var sel = document.querySelector("input[data-profile-radio]:checked");
+    if (box && sel) box.classList.toggle("hidden", sel.value !== "aggressive");
+  }
+  document.addEventListener("change", function (e) {
+    if (e.target.matches && e.target.matches("input[data-profile-radio]")) syncProfile();
+  });
+  document.addEventListener("DOMContentLoaded", syncProfile);
+
   function init(root) {
     root.querySelectorAll("table[data-table]").forEach(enhanceTable);
     initCharts(root);

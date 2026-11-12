@@ -3,6 +3,7 @@
     python -m app.cli create-user --admin <логин>
     python -m app.cli reset-password <логин>
     python -m app.cli import-targets targets.yaml
+    python -m app.cli backup [путь]
 """
 
 from __future__ import annotations
@@ -37,7 +38,12 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("username")
     it = sub.add_parser("import-targets", help="импортировать цели из YAML")
     it.add_argument("path", type=Path)
+    bk = sub.add_parser("backup", help="согласованная копия базы SQLite (можно на работающем приложении)")
+    bk.add_argument("path", type=Path, nargs="?")
     args = parser.parse_args(argv)
+
+    if args.cmd == "backup":
+        return _backup(args.path)
 
     create_all()
     try:
@@ -71,6 +77,25 @@ def main(argv: list[str] | None = None) -> int:
     except ValidationError as exc:
         print(f"Ошибка: {exc}", file=sys.stderr)
         return 1
+    return 0
+
+
+def _backup(path: Path | None) -> int:
+    import sqlite3
+    from datetime import datetime
+
+    from app.config import get_settings
+
+    s = get_settings()
+    src = s.data_dir / "perimeter.db"
+    if not src.is_file():
+        print(f"База не найдена: {src}", file=sys.stderr)
+        return 1
+    dest = path or (s.data_dir / "backups" / f"perimeter-{datetime.now():%Y%m%d-%H%M%S}.db")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(src) as source, sqlite3.connect(dest) as target:
+        source.backup(target)
+    print(f"Резервная копия: {dest}")
     return 0
 
 

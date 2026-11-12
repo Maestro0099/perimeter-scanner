@@ -5,7 +5,7 @@
     <span class="font-semibold tabular-nums">{{ scan.progress|round|int }}%</span>
   </div>
   <div class="progress mt-2" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ scan.progress|round|int }}">
-    <span class="{{ 'animate-pulse' if scan.is_active }} {{ 'bg-red-500' if scan.status == 'failed' else ('bg-emerald-500' if scan.status == 'done' else '') }}" style="width: {{ [scan.progress, 2]|max if scan.status != 'queued' else 0 }}%"></span>
+    <span class="{{ 'animate-pulse' if scan.is_active }} {{ 'bar-' ~ scan.status if scan.status in ('done', 'failed') else '' }}" style="width: {{ [scan.progress, 2]|max if scan.status != 'queued' else 0 }}%"></span>
   </div>
   {% if scan.error %}<div class="alert-error mt-3">{{ scan.error }}</div>{% endif %}
 </div>

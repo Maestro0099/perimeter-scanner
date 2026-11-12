@@ -33,7 +33,9 @@ USER app
 ENV APP_HOST=0.0.0.0 \
     APP_PORT=8000 \
     DATA_DIR=/app/data \
-    TARGETS_FILE=/app/targets.yaml
+    TARGETS_FILE=/app/targets.yaml \
+    XDG_CACHE_HOME=/tmp/.cache \
+    HOME=/tmp
 
 EXPOSE 8000
 

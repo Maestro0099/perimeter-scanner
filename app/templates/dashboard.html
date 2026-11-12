@@ -32,7 +32,7 @@
     <div class="stat-label">Общий риск периметра</div>
     <div class="stat-value">{{ risk.label }}</div>
     <div class="mt-2 flex items-center gap-2">
-      <div class="progress flex-1"><span class="sev-dot-{{ risk.level }}" style="width: {{ [risk.index, 3]|max }}%"></span></div>
+      <div class="progress flex-1"><span class="bar-{{ risk.level }}" style="width: {{ [risk.index, 3]|max }}%"></span></div>
       <span class="text-xs tabular-nums muted">{{ risk.index }}/100</span>
     </div>
   </div>

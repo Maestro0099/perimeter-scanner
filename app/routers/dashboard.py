@@ -17,7 +17,7 @@ from app.templating import fmt_dt, render
 
 router = APIRouter()
 
-SEV_COLORS = {"critical": "#b91c1c", "high": "#ea580c", "medium": "#d97706", "low": "#2563eb", "info": "#94a3b8"}
+SEV_COLORS = {"critical": "#b91c1c", "high": "#ea580c", "medium": "#eab308", "low": "#2563eb", "info": "#94a3b8"}
 
 
 def chart_configs(counts: dict[str, int], trend_rows: list[dict]) -> dict:

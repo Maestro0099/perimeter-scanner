@@ -81,6 +81,13 @@
 
   .progress { @apply h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800; }
   .progress > span { @apply block h-full rounded-full bg-indigo-500 transition-all duration-500; }
+  .progress > span.bar-critical { @apply bg-sev-critical; }
+  .progress > span.bar-high { @apply bg-sev-high; }
+  .progress > span.bar-medium { @apply bg-sev-medium; }
+  .progress > span.bar-low { @apply bg-sev-low; }
+  .progress > span.bar-info { @apply bg-sev-info; }
+  .progress > span.bar-done { @apply bg-emerald-500; }
+  .progress > span.bar-failed { @apply bg-red-500; }
   .tabs { @apply flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800; }
   .tab { @apply whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200; }
   .tab.active { @apply border-indigo-500 text-indigo-600 dark:text-indigo-400; }
