@@ -31,7 +31,7 @@ jobs:
       - run: pytest -q
 
   docker:
-    name: Сборка образа и запуск через install.sh
+    name: Сборка образа, запуск и HTTPS через install.sh
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +44,31 @@ jobs:
           curl -fsS http://127.0.0.1:8000/healthz
           curl -fsS -o /dev/null -w "login: %{http_code}\n" http://127.0.0.1:8000/login
           curl -fsS -o /dev/null http://127.0.0.1:8000/static/css/app.css
+      - name: nginx и HTTPS, настроенные install.sh
+        run: |
+          set -x
+          # приложение не опубликовано в сеть напрямую
+          docker compose port app 8000 | grep -q '^127.0.0.1:'
+          # http перенаправляется на https
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1/login)" = "301"
+          # сертификат выпущен на адреса машины и проходит проверку как доверенный корень
+          curl -fsS --cacert /etc/ssl/perimeter-scanner/fullchain.pem https://127.0.0.1/healthz
+          test "$(sudo stat -c '%a' /etc/ssl/perimeter-scanner/privkey.pem)" = "600"
+          # старые протоколы отключены
+          if echo | openssl s_client -connect 127.0.0.1:443 -tls1_1 2>/dev/null | grep -q 'BEGIN CERTIFICATE'; then echo "TLS 1.1 включён"; exit 1; fi
+          # вход по HTTPS: cookie с флагом Secure, чужой Origin отклоняется
+          J=$(mktemp)
+          TOK=$(curl -ksS -c "$J" https://127.0.0.1/login | grep -o 'name="csrf_token" value="[^"]*"' | head -1 | sed 's/.*value="//;s/"//')
+          test "$(curl -ksS -b "$J" -c "$J" -o /dev/null -w '%{http_code}' -H 'Origin: https://127.0.0.1' --data-urlencode "csrf_token=$TOK" -d 'username=admin&password=Ci-Test-Password-123&next=/' https://127.0.0.1/login)" = "303"
+          test "$(curl -ksS -b "$J" -o /dev/null -w '%{http_code}' https://127.0.0.1/)" = "200"
+          test "$(awk '$6 ~ /^ps_/ && $4 == "TRUE"' "$J" | wc -l)" = "2"
+          test "$(curl -ksS -b "$J" -o /dev/null -w '%{http_code}' -H 'Origin: https://evil.example' --data-urlencode "csrf_token=$TOK" -X POST https://127.0.0.1/logout)" = "403"
+          # повторный запуск скрипта ничего не ломает и не перевыпускает сертификат
+          FP=$(sudo openssl x509 -in /etc/ssl/perimeter-scanner/fullchain.pem -noout -fingerprint)
+          ./install.sh > /tmp/second-run.log
+          test "$FP" = "$(sudo openssl x509 -in /etc/ssl/perimeter-scanner/fullchain.pem -noout -fingerprint)"
+          curl -kfsS https://127.0.0.1/healthz
+          if grep -q 'Пароль администратора' /tmp/second-run.log; then echo 'пароль сгенерирован повторно'; exit 1; fi
       - name: Контейнер работает не от root, файловая система только для чтения
         run: |
           test "$(docker compose exec -T app id -u)" = "10001"
