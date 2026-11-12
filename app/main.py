@@ -25,6 +25,8 @@ def _configure_logging() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    for noisy in ("fontTools", "weasyprint", "httpx", "httpcore", "apscheduler.executors.default"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
 @asynccontextmanager
@@ -67,9 +69,9 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
     app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
-    from app.routers import audit_log, auth, dashboard, scans, targets, users
+    from app.routers import assets, audit_log, auth, dashboard, findings, reports, scans, targets, users
 
-    for module in (auth, dashboard, targets, scans, users, audit_log):
+    for module in (auth, dashboard, targets, scans, assets, findings, reports, users, audit_log):
         app.include_router(module.router)
 
     @app.exception_handler(LoginRequired)

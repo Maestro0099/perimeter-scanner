@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% from "partials/tables.html" import findings_table, severity_summary %}
+{% block title %}Находки{% endblock %}
+{% block content %}
+<p class="mb-4 text-sm muted">Актуальные находки по результатам последних сканов каждой цели.</p>
+{{ severity_summary(counts) }}
+<div class="mt-6 card">{{ findings_table(findings) }}</div>
+{% endblock %}

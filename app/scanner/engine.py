@@ -229,6 +229,8 @@ class ScanJob:
             hosts = self.run_nmap(targets, profile, timing, 0, 95)
             self.check_cancel()
             self.store_nmap(hosts, targets)
+            self.progress("Сравнение с предыдущим сканом", 97, force=True)
+            self.finalize()
         except NmapCancelled:
             _finish(self.scan_id, ScanStatus.CANCELLED, "Отменено пользователем")
             return
@@ -238,6 +240,26 @@ class ScanJob:
             return
         _finish(self.scan_id, ScanStatus.DONE)
         log.info("Скан #%s завершён", self.scan_id)
+
+    def finalize(self) -> None:
+        """Сравнение с предыдущими сканами и сводка."""
+        from app.analysis.diff import compute_scan_changes
+
+        with session_scope() as db:
+            scan = db.get(Scan, self.scan_id)
+            assert scan is not None
+            changes = compute_scan_changes(db, scan)
+            db.flush()
+            counts: dict[str, int] = {}
+            for f in scan.findings:
+                counts[f.severity] = counts.get(f.severity, 0) + 1
+            scan.summary = {
+                "hosts": len(scan.hosts),
+                "open_ports": sum(len(h.ports) for h in scan.hosts),
+                "findings": counts,
+                "changes": len(changes),
+            }
+        self.changes_count = len(changes)
 
     def _validated_targets(self, db: Session, scan: Scan) -> list[tuple[int, str, str]]:
         """Повторная проверка целей непосредственно перед запуском."""

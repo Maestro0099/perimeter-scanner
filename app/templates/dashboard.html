@@ -1,9 +1,116 @@
 {% extends "base.html" %}
+{% from "partials/icons.html" import icon, sev_badge, status_badge %}
+{% from "partials/tables.html" import changes_list %}
 {% block title %}Дашборд{% endblock %}
 {% block content %}
-<div class="grid gap-4 sm:grid-cols-3">
-  {% for k, l in KIND_LABELS.items() %}
-  <div class="card card-body"><div class="stat-label">{{ l }}</div><div class="stat-value">{{ counts.get(k, 0) }}</div></div>
-  {% endfor %}
+{% if targets_total == 0 %}
+<div class="card card-body mb-6 flex flex-wrap items-center justify-between gap-4">
+  <div><h2>Начните с добавления целей</h2><p class="text-sm muted">Добавьте IP-адреса, подсети и домены организации или импортируйте targets.yaml.</p></div>
+  <a href="/targets" class="btn-primary">{{ icon('plus', 'h-4 w-4') }} Добавить цели</a>
 </div>
+{% endif %}
+
+{% if active %}
+<div class="card mb-6">
+  <div class="card-header"><h2>Выполняются сканирования</h2></div>
+  <ul class="divide-y divide-slate-100 dark:divide-slate-800">
+  {% for s in active %}
+    <li class="flex items-center gap-4 px-4 py-3">
+      <a href="/scans/{{ s.id }}" class="font-medium">#{{ s.id }}</a>
+      <span class="text-xs muted">{{ PROFILE_LABELS.get(s.profile) }}</span>
+      <div class="progress flex-1"><span style="width: {{ s.progress }}%"></span></div>
+      <span class="w-48 truncate text-xs muted">{{ s.stage }}</span>
+      <span class="w-10 text-right text-sm tabular-nums">{{ s.progress|round|int }}%</span>
+    </li>
+  {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+  <div class="card card-body sev-border-{{ risk.level }}">
+    <div class="stat-label">Общий риск периметра</div>
+    <div class="stat-value">{{ risk.label }}</div>
+    <div class="mt-2 flex items-center gap-2">
+      <div class="progress flex-1"><span class="sev-dot-{{ risk.level }}" style="width: {{ [risk.index, 3]|max }}%"></span></div>
+      <span class="text-xs tabular-nums muted">{{ risk.index }}/100</span>
+    </div>
+  </div>
+  <a href="/findings" class="card card-body block hover:ring-1 hover:ring-indigo-300 dark:hover:ring-indigo-500/40">
+    <div class="stat-label">Критические и высокие</div>
+    <div class="stat-value"><span class="text-sev-critical">{{ counts.critical }}</span> <span class="text-slate-300 dark:text-slate-600">/</span> <span class="text-sev-high">{{ counts.high }}</span></div>
+    <div class="mt-1 text-xs muted">всего находок: {{ counts.values()|sum }}</div>
+  </a>
+  <a href="/assets/ip" class="card card-body block hover:ring-1 hover:ring-indigo-300 dark:hover:ring-indigo-500/40">
+    <div class="stat-label">Хосты · открытые порты</div>
+    <div class="stat-value">{{ hosts_total }} <span class="text-slate-300 dark:text-slate-600">·</span> {{ ports_total }}</div>
+    <div class="mt-1 text-xs muted">целей в списке: {{ targets_total }}</div>
+  </a>
+  <a href="/changes" class="card card-body block hover:ring-1 hover:ring-indigo-300 dark:hover:ring-indigo-500/40">
+    <div class="stat-label">Последний скан</div>
+    <div class="stat-value text-2xl">{{ last_scan.finished_at|dt('%d.%m %H:%M') if last_scan else '—' }}</div>
+    <div class="mt-1 text-xs muted">значимых изменений за всё время: {{ important_changes }}</div>
+  </a>
+</div>
+
+<div class="mt-6 grid gap-6 xl:grid-cols-3">
+  <div class="card">
+    <div class="card-header"><h2>Находки по уровням риска</h2></div>
+    <div class="card-body">
+      {% if counts.values()|sum - counts.info > 0 %}
+      <div class="relative h-64"><canvas data-chart="chart-donut" aria-label="Распределение находок по уровням риска" role="img"></canvas></div>
+      <script type="application/json" id="chart-donut">{{ charts.donut|tojson }}</script>
+      {% else %}<div class="flex h-64 items-center justify-center text-sm muted">Значимых находок нет</div>{% endif %}
+    </div>
+  </div>
+  <div class="card xl:col-span-2">
+    <div class="card-header"><h2>Динамика по сканам</h2><span class="text-xs muted">последние 20 сканов</span></div>
+    <div class="card-body">
+      {% if has_trend %}
+      <div class="relative h-64"><canvas data-chart="chart-trend" aria-label="Находки по уровням в последних сканах" role="img"></canvas></div>
+      <script type="application/json" id="chart-trend">{{ charts.trend|tojson }}</script>
+      {% else %}<div class="flex h-64 items-center justify-center text-sm muted">Пока нет завершённых сканов</div>{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="mt-6 grid gap-6 xl:grid-cols-3">
+  <div class="card xl:col-span-2">
+    <div class="card-header"><h2>Главные проблемы</h2><a href="/findings" class="text-sm">Все находки →</a></div>
+    <ul class="divide-y divide-slate-100 dark:divide-slate-800">
+      {% for f in top_findings %}
+      <li class="flex items-start gap-3 px-4 py-3">
+        {{ sev_badge(f.severity) }}
+        <div class="min-w-0 flex-1">
+          <div class="truncate text-sm font-medium">{{ f.title }}</div>
+          <div class="text-xs muted"><a href="/assets/{{ f.asset_type }}/{{ f.asset }}" class="font-mono">{{ f.asset }}</a>{% if f.port %} · {{ f.port }}/{{ f.protocol }}{% endif %}{% if f.cvss is not none %} · CVSS {{ '%.1f'|format(f.cvss) }}{% endif %}</div>
+        </div>
+      </li>
+      {% else %}
+      <li class="flex items-center gap-2 px-4 py-8 text-sm muted justify-center">{{ icon('shield', 'h-5 w-5 text-emerald-500') }} Критических и высоких находок нет</li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-header"><h2>Последние изменения</h2><a href="/changes" class="text-sm">Все →</a></div>
+    <div class="max-h-[26rem] overflow-y-auto">{{ changes_list(changes, show_scan=True) }}</div>
+  </div>
+</div>
+
+{% if top_assets %}
+<div class="card mt-6">
+  <div class="card-header"><h2>Активы с наибольшим риском</h2></div>
+  <div class="grid gap-px bg-slate-100 dark:bg-slate-800 sm:grid-cols-2 xl:grid-cols-3">
+    {% for a in top_assets %}
+    <a href="/assets/{{ a.type }}/{{ a.asset }}" class="flex items-center justify-between gap-3 bg-white px-4 py-3 hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/60">
+      <div class="min-w-0">
+        <div class="truncate font-mono text-sm font-medium text-slate-900 dark:text-white">{{ a.asset }}</div>
+        <div class="text-xs muted">{{ 'IP-адрес' if a.type == 'ip' else 'Домен' }}{% if a.open_ports %} · портов: {{ a.open_ports }}{% endif %}</div>
+      </div>
+      <div class="flex gap-1">{% for s in ['critical','high','medium'] if a.counts[s] %}<span class="sev-{{ s }}">{{ a.counts[s] }}</span>{% endfor %}</div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 {% endblock %}
