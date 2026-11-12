@@ -9,12 +9,12 @@ venv/
 # Секреты и данные организации
 .env
 targets.yaml
-data/
+/data/
 *.db
 *.sqlite
 *.sqlite3
-reports/
-backups/
+/reports/
+/backups/
 
 # Node (сборка Tailwind)
 node_modules/

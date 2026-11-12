@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon, sev_badge %}
+{% from "partials/export.html" import export_buttons, risk_card %}
+{% block title %}Отчёты{% endblock %}
+{% block content %}
+{% set s = r.summary %}
+<div class="card card-body mb-6 flex flex-wrap items-center justify-between gap-4">
+  <div>
+    <h2>Сводный отчёт по периметру</h2>
+    <p class="text-sm muted">Общая оценка риска, топ проблем, активы, динамика и все находки. Отчёты по отдельным IP и доменам — на их страницах.</p>
+  </div>
+  {{ export_buttons('/reports/perimeter') }}
+</div>
+
+{{ risk_card(s.risk, s.counts) }}
+
+<div class="mt-6 grid gap-4 sm:grid-cols-4">
+  <div class="card card-body"><div class="stat-label">Цели</div><div class="stat-value">{{ s.targets }}</div></div>
+  <div class="card card-body"><div class="stat-label">Хосты</div><div class="stat-value">{{ s.hosts }}</div></div>
+  <div class="card card-body"><div class="stat-label">Открытые порты</div><div class="stat-value">{{ s.open_ports }}</div></div>
+  <div class="card card-body"><div class="stat-label">Домены</div><div class="stat-value">{{ s.domains }}</div></div>
+</div>
+
+<div class="mt-6 card">
+  <div class="card-header"><h2>Топ проблем</h2><a href="/findings" class="text-sm">Все находки →</a></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Уровень</th><th>Актив</th><th>Находка</th><th>Рекомендация</th></tr></thead>
+      <tbody>
+      {% for f in r.top_findings %}
+        <tr>
+          <td>{{ sev_badge(f.severity) }}</td>
+          <td class="whitespace-nowrap"><a href="/assets/{{ f.asset_type }}/{{ f.asset }}" class="font-mono text-xs">{{ f.asset }}</a>{% if f.port %}<div class="mono muted">{{ f.port }}/{{ f.protocol }}</div>{% endif %}</td>
+          <td class="font-medium">{{ f.title }}{% if f.cvss is not none %} <span class="text-xs muted">CVSS {{ '%.1f'|format(f.cvss) }}</span>{% endif %}</td>
+          <td class="max-w-md text-xs">{{ f.recommendation }}</td>
+        </tr>
+      {% else %}
+        <tr data-empty><td colspan="4" class="py-8 text-center muted">Значимых проблем нет</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
