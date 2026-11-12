@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon, flash, csrf_input %}
+{% block title %}Новое сканирование{% endblock %}
+{% block content %}
+{{ flash('', err) }}
+{% if not nmap_ok %}<div class="alert-error mb-4">nmap не найден в системе. Установите пакет nmap или используйте Docker-образ.</div>{% endif %}
+{% if not privileged %}<div class="alert-warning mb-4">NMAP_PRIVILEGED=false: используется TCP connect-сканирование, UDP и определение ОС недоступны.</div>{% endif %}
+<form method="post" action="/scans" class="grid gap-6 lg:grid-cols-3" id="scan-form">
+  {{ csrf_input(request) }}
+  <div class="card lg:col-span-2" data-table-wrap>
+    <div class="card-header">
+      <div><h2>Цели</h2><p class="text-xs muted">Доступны только утверждённые цели. Выберите группу целиком или отдельные цели.</p></div>
+      <div class="flex flex-wrap items-center gap-2">
+        <select name="group_id" class="input w-auto" aria-label="Группа">
+          <option value="">— группа целиком —</option>
+          {% for g in groups %}<option value="{{ g.id }}" {{ 'selected' if preselect_group == g.id }}>{{ g.name }} ({{ g.targets|selectattr('approved')|list|length }})</option>{% endfor %}
+        </select>
+        <input type="search" data-table-search class="input w-44" placeholder="Поиск…" aria-label="Поиск целей">
+      </div>
+    </div>
+    <div class="table-wrap max-h-[28rem] overflow-y-auto">
+      <table class="table" data-table>
+        <thead><tr><th class="w-8"></th><th data-sort>Цель</th><th data-sort>Тип</th><th data-sort>Группа</th></tr></thead>
+        <tbody>
+        {% for t in targets %}
+          <tr>
+            <td><input type="checkbox" class="checkbox" name="target_ids" value="{{ t.id }}" id="t{{ t.id }}" {{ 'checked' if preselect_target == t.id }}></td>
+            <td><label for="t{{ t.id }}" class="font-mono">{{ t.value }}</label></td>
+            <td class="text-xs">{{ KIND_LABELS[t.kind] }}</td>
+            <td class="text-xs">{{ t.group.name if t.group else '—' }}</td>
+          </tr>
+        {% else %}
+          <tr data-empty><td colspan="4" class="py-8 text-center muted">Нет утверждённых целей. <a href="/targets">Добавьте цели</a>.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="border-t border-slate-200 p-4 dark:border-slate-800">
+      <label class="label" for="new_targets">Новые адреса — добавить в список и сразу сканировать</label>
+      <textarea id="new_targets" name="new_targets" rows="2" class="input font-mono" placeholder="198.51.100.40&#10;new-site.example.com"></textarea>
+      <p class="mt-1 text-xs muted">IP, подсети CIDR или домены, по одному в строке. Адреса будут добавлены в утверждённый список (в выбранную выше группу) с записью в журнал аудита. Если выбраны отдельные цели, группа используется только как метка скана.</p>
+    </div>
+  </div>
+
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header"><h2>Профиль</h2></div>
+      <div class="card-body space-y-3">
+        {% for key, p in profiles.items() %}
+        <label class="flex cursor-pointer gap-3 rounded-lg border p-3 {{ 'border-orange-300 dark:border-orange-500/40' if p.manual_only else 'border-slate-200 dark:border-slate-700' }} has-[:checked]:border-accent-500 has-[:checked]:ring-1 has-[:checked]:ring-accent-500">
+          <input type="radio" name="profile" value="{{ key }}" class="mt-0.5 border-slate-300 text-accent-600 focus:ring-accent-500 dark:border-slate-600 dark:bg-slate-950 dark:text-accent-500" {{ 'checked' if key == 'quick' }} data-profile-radio>
+          <span>
+            <span class="block text-sm font-medium">{{ p.title }}{% if p.manual_only %} <span class="sev-high ml-1">{{ icon('alert', 'h-3 w-3') }} осторожно</span>{% endif %}</span>
+            <span class="block text-xs muted">{{ p.description }}</span>
+          </span>
+        </label>
+        {% endfor %}
+        <div>
+          <label class="label" for="timing">Скорость (-T)</label>
+          <select id="timing" name="timing" class="input">
+            {% for t, l in [(0,'T0 — параноидальная'),(1,'T1 — скрытная'),(2,'T2 — вежливая'),(3,'T3 — обычная'),(4,'T4 — быстрая'),(5,'T5 — безумная')] %}
+            <option value="{{ t }}" {{ 'selected' if t == default_timing }}>{{ l }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card sev-border-high hidden" id="aggressive-confirm">
+      <div class="card-body space-y-3">
+        <div class="flex items-start gap-2 text-sm text-orange-800 dark:text-orange-300">{{ icon('alert', 'h-5 w-5 shrink-0') }}<span><b>Только для агрессивного профиля.</b> {{ profiles['aggressive'].warning }}</span></div>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="confirm_aggressive" class="checkbox"> Я согласовал запуск с владельцами систем</label>
+        <div>
+          <label class="label" for="confirm_text">Введите «ПОДТВЕРЖДАЮ»</label>
+          <input id="confirm_text" name="confirm_text" class="input" autocomplete="off">
+        </div>
+        <p class="text-xs muted">Категории brute, dos и exploit не используются ни в одном профиле.</p>
+      </div>
+    </div>
+
+    <button class="btn-primary w-full py-2.5">{{ icon('play', 'h-4 w-4') }} Запустить</button>
+  </div>
+</form>
+{% endblock %}

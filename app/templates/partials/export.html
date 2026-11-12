@@ -1,0 +1,26 @@
+{% from "partials/icons.html" import icon %}
+{% macro export_buttons(base) -%}
+<div class="flex flex-wrap items-center gap-1.5">
+  <span class="text-xs muted">Экспорт:</span>
+  <a href="{{ base }}.pdf" class="btn-secondary btn-sm">{{ icon('download', 'h-3.5 w-3.5') }} PDF</a>
+  <a href="{{ base }}.html" class="btn-secondary btn-sm" target="_blank" rel="noopener">HTML</a>
+  <a href="{{ base }}.csv" class="btn-secondary btn-sm">CSV</a>
+  <a href="{{ base }}.json" class="btn-secondary btn-sm">JSON</a>
+</div>
+{%- endmacro %}
+
+{% macro risk_card(risk, counts) -%}
+<div class="grid gap-3 sm:grid-cols-6">
+  <div class="card sev-border-{{ risk.level }} px-4 py-3 sm:col-span-1">
+    <div class="stat-label">Оценка риска</div>
+    <div class="mt-0.5 text-xl font-semibold">{{ risk.label }}</div>
+    <div class="text-xs muted">индекс {{ risk.index }}/100</div>
+  </div>
+  {% for s in SEVERITY_ORDER_LIST %}
+  <div class="card sev-border-{{ s }} px-4 py-3">
+    <div class="stat-label">{{ SEVERITY_LABELS[s] }}</div>
+    <div class="mt-0.5 text-2xl font-semibold tabular-nums">{{ counts.get(s, 0) }}</div>
+  </div>
+  {% endfor %}
+</div>
+{%- endmacro %}

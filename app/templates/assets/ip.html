@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+{% from "partials/tables.html" import findings_table, ports_table, changes_list %}
+{% from "partials/export.html" import export_buttons, risk_card %}
+{% from "partials/checks.html" import web_table, tls_table %}
+{% block title %}{{ r.asset }}{% endblock %}
+{% block breadcrumbs %}<a href="/assets/ip" class="text-xs muted">← IP-адреса</a>{% endblock %}
+{% block content %}
+<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+  <div class="text-sm muted">
+    {% if r.host %}Последний скан <a href="/scans/{{ r.host.scan_id }}">#{{ r.host.scan_id }}</a>
+    {% if r.host.hostnames %} · {{ r.host.hostnames|join(', ') }}{% endif %}
+    {% if r.host.os_name %} · ОС: {{ r.host.os_name }} ({{ r.host.os_accuracy }}%){% endif %}{% endif %}
+    {% if r.domains %} · домены: {% for d in r.domains %}<a href="/assets/domain/{{ d }}">{{ d }}</a>{{ ', ' if not loop.last }}{% endfor %}{% endif %}
+  </div>
+  {{ export_buttons('/assets/ip/' ~ r.asset ~ '/export') }}
+</div>
+{{ risk_card(r.risk, r.counts) }}
+
+<div class="mt-6 card">
+  <div class="card-header"><h2>Порты и сервисы</h2><span class="text-xs muted">{{ r.ports|length }} {{ plural(r.ports|length, 'открытый порт', 'открытых порта', 'открытых портов') }}</span></div>
+  {{ ports_table(r.ports) }}
+  {% if r.host and r.host.host_scripts %}
+  <div class="border-t border-slate-200 px-4 py-3 text-xs dark:border-slate-800">
+    <div class="label">Скрипты уровня хоста</div>
+    {% for s in r.host.host_scripts %}<details><summary class="cursor-pointer font-mono text-accent-600 dark:text-accent-400">{{ s.id }}</summary><pre class="pre my-1">{{ s.output }}</pre></details>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+{% set x = r.host.extra if r.host and r.host.extra else {} %}
+{% if x %}
+<div class="mt-6 card">
+  <div class="card-header"><h2>Сведения о хосте</h2></div>
+  <div class="card-body grid gap-6 text-sm md:grid-cols-3">
+    <div>
+      <div class="label">Операционная система (варианты)</div>
+      {% for m in x.get('os_matches', []) %}<div class="flex justify-between gap-2"><span>{{ m.name }}</span><span class="font-mono text-xs muted">{{ m.accuracy }}%</span></div>{% else %}<span class="muted">не определена</span>{% endfor %}
+      {% if x.get('service_os') %}<div class="mt-1 text-xs muted">по баннерам сервисов: {{ x.service_os|join(', ') }}</div>{% endif %}
+      {% if x.get('device_types') %}<div class="text-xs muted">тип устройства: {{ x.device_types|join(', ') }}</div>{% endif %}
+    </div>
+    <div>
+      <div class="label">Время работы и удалённость</div>
+      <div>{% if x.get('uptime_seconds') %}Uptime: {{ x.uptime_seconds|duration }}{% else %}<span class="muted">uptime не определён</span>{% endif %}</div>
+      {% if x.get('last_boot') %}<div class="text-xs muted">загрузка: {{ x.last_boot }}</div>{% endif %}
+      {% if x.get('distance') %}<div class="text-xs muted">сетевых переходов: {{ x.distance }}</div>{% endif %}
+    </div>
+    <div>
+      <div class="label">Трассировка</div>
+      {% for hop in x.get('trace', []) %}<div class="font-mono text-xs"><span class="muted">{{ hop.ttl }}</span> {{ hop.ip }}{% if hop.host %} <span class="muted">{{ hop.host }}</span>{% endif %} <span class="muted">{{ hop.rtt }} мс</span></div>{% else %}<span class="muted">нет данных</span>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="mt-6 card">
+  <div class="card-header"><h2>Уязвимости и находки</h2></div>
+  {{ findings_table(r.findings, show_asset=False) }}
+</div>
+
+{% if r.web %}<div class="mt-6 card"><div class="card-header"><h2>Веб-сервисы</h2></div>{{ web_table(r.web) }}</div>{% endif %}
+{% if r.tls %}<div class="mt-6 card"><div class="card-header"><h2>TLS</h2></div>{{ tls_table(r.tls) }}</div>{% endif %}
+
+<div class="mt-6 grid gap-6 lg:grid-cols-2">
+  <div class="card">
+    <div class="card-header"><h2>История изменений</h2></div>
+    <div class="max-h-[30rem] overflow-y-auto">{{ changes_list(r.changes, show_scan=True) }}</div>
+  </div>
+  <div class="card">
+    <div class="card-header"><h2>История сканов</h2></div>
+    <div class="table-wrap max-h-[30rem] overflow-y-auto">
+      <table class="table">
+        <thead><tr><th>Скан</th><th>Дата</th><th>Профиль</th><th>Открытые порты</th></tr></thead>
+        <tbody>
+        {% for h in r.history %}
+          <tr><td><a href="/scans/{{ h.scan.id }}">#{{ h.scan.id }}</a></td><td class="whitespace-nowrap text-xs">{{ h.scan.finished_at|dt }}</td>
+            <td class="text-xs">{{ PROFILE_LABELS.get(h.scan.profile) }}</td><td class="font-mono text-xs">{{ h.ports or '—' }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,154 @@
+{% from "partials/icons.html" import icon %}
+{% macro ok_bad(value, ok_text='Да', bad_text='Нет', unknown='—') -%}
+{% if value is none %}<span class="badge-neutral">{{ unknown }}</span>{% elif value %}<span class="badge-green">{{ ok_text }}</span>{% else %}<span class="sev-medium">{{ bad_text }}</span>{% endif %}
+{%- endmacro %}
+
+{# Результаты проверки домена: DNS, почта, AXFR, WHOIS, поддомены #}
+{% macro domain_block(d, user=None, request=None, full=False) -%}
+{% set es = d.email_security or {} %}
+{% set spf = es.get('spf', {}) %}{% set dmarc = es.get('dmarc', {}) %}{% set dkim = es.get('dkim', {}) %}
+<div class="grid gap-6 lg:grid-cols-2">
+  <div class="card">
+    <div class="card-header"><h2><a href="/assets/domain/{{ d.domain }}">{{ d.domain }}</a> — DNS-записи</h2></div>
+    <div class="table-wrap">
+      <table class="table"><tbody>
+        {% for rt in ['A', 'AAAA', 'CNAME', 'MX', 'NS', 'TXT', 'CAA', 'SOA'] %}
+        <tr><th class="w-20 !bg-transparent">{{ rt }}</th>
+          <td class="break-all font-mono text-xs">{% for v in (d.records.get(rt) or []) %}<div>{% if rt in ('A', 'AAAA') %}<a href="/assets/ip/{{ v }}">{{ v }}</a>{% else %}{{ v }}{% endif %}</div>{% else %}<span class="muted">—</span>{% endfor %}</td></tr>
+        {% endfor %}
+      </tbody></table>
+    </div>
+  </div>
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header"><h2>Почта: SPF, DKIM, DMARC</h2></div>
+      <div class="card-body space-y-3 text-sm">
+        <div><div class="flex items-center gap-2"><span class="w-16 font-medium">SPF</span>{{ ok_bad(spf.get('record') and not spf.get('issues'), 'Настроен', 'Есть замечания' if spf.get('record') else 'Нет записи') }}</div>
+          {% if spf.get('record') %}<div class="mono mt-1 break-all muted">{{ spf.record }}</div>{% endif %}
+          {% for i in spf.get('issues', []) %}<div class="text-xs text-amber-700 dark:text-amber-400">• {{ i }}</div>{% endfor %}</div>
+        <div><div class="flex items-center gap-2"><span class="w-16 font-medium">DMARC</span>{{ ok_bad(dmarc.get('policy') in ('quarantine', 'reject'), 'p=' ~ dmarc.get('policy'), ('p=' ~ dmarc.get('policy')) if dmarc.get('record') else 'Нет записи') }}</div>
+          {% if dmarc.get('record') %}<div class="mono mt-1 break-all muted">{{ dmarc.record }}</div>{% endif %}
+          {% for i in dmarc.get('issues', []) %}<div class="text-xs text-amber-700 dark:text-amber-400">• {{ i }}</div>{% endfor %}</div>
+        <div><div class="flex items-center gap-2"><span class="w-16 font-medium">DKIM</span>{{ ok_bad(dkim.get('selectors') | length > 0, 'Найден', 'Не найден') }}</div>
+          {% for sel, rec in (dkim.get('selectors') or {}).items() %}<div class="mono mt-1 truncate muted">{{ sel }}: {{ rec[:120] }}</div>{% endfor %}</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h2>Zone transfer и WHOIS</h2></div>
+      <div class="card-body space-y-2 text-sm">
+        {% for ns, r in (d.zone_transfer or {}).items() %}
+        <div class="flex items-center justify-between gap-2"><span class="font-mono text-xs">{{ ns }}</span>{% if r.allowed %}<span class="sev-high">AXFR разрешён ({{ r.records }} записей)</span>{% else %}<span class="badge-green">AXFR запрещён</span>{% endif %}</div>
+        {% else %}<div class="muted">NS-серверы не найдены</div>{% endfor %}
+        <hr class="border-slate-200 dark:border-slate-800">
+        {% set w = d.whois or {} %}
+        {% if w.get('error') %}<div class="muted">{{ w.error }}</div>{% else %}
+        <div class="grid grid-cols-3 gap-y-1 text-sm">
+          <span class="muted">Домен</span><span class="col-span-2 font-mono text-xs">{{ w.get('domain') }}</span>
+          <span class="muted">Регистратор</span><span class="col-span-2">{{ w.get('registrar') or '—' }}</span>
+          <span class="muted">Создан</span><span class="col-span-2">{{ w.get('created') or '—' }}</span>
+          <span class="muted">Оплачен до</span><span class="col-span-2">{{ w.get('expires') or '—' }}
+            {% if w.get('days_left') is not none %}<span class="{{ 'sev-critical' if w.days_left < 30 else ('sev-medium' if w.days_left < 60 else 'badge-green') }} ml-1">{{ w.days_left }} дн.</span>{% endif %}</span>
+        </div>
+        {% if full and w.get('raw') %}<details class="text-xs"><summary class="cursor-pointer text-accent-600 dark:text-accent-400">Ответ WHOIS</summary><pre class="pre mt-1">{{ w.raw }}</pre></details>{% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+<div class="card mt-6" data-table-wrap>
+  <div class="card-header">
+    <h2>Поддомены ({{ d.subdomains|length }})</h2>
+    <div class="flex items-center gap-2"><input type="search" data-table-search class="input w-48" placeholder="Поиск…" aria-label="Поиск поддоменов"><span class="text-xs muted"><span data-table-count>0</span></span></div>
+  </div>
+  {% if (d.records or {}).get('_notes') %}<div class="alert-warning mx-4 mt-3">{{ d.records['_notes']|join('; ') }}</div>{% endif %}
+  <div class="table-wrap max-h-[28rem] overflow-y-auto">
+    <table class="table" data-table>
+      <thead><tr><th data-sort>Имя</th><th>Адреса</th><th data-sort>Источник</th>{% if full and user and user.is_admin %}<th></th>{% endif %}</tr></thead>
+      <tbody>
+      {% for s in d.subdomains %}
+        <tr>
+          <td class="font-mono text-xs"><a href="/assets/domain/{{ s.name }}">{{ s.name }}</a></td>
+          <td class="font-mono text-xs">{% for ip in s.ips or [] %}<a href="/assets/ip/{{ ip }}">{{ ip }}</a>{{ ', ' if not loop.last }}{% else %}<span class="muted">не разрешается</span>{% endfor %}</td>
+          <td class="text-xs">{{ (s.sources or [])|join(', ') }}</td>
+          {% if full and user and user.is_admin %}
+          <td class="text-right"><form method="post" action="/assets/domain/{{ d.domain }}/promote" data-confirm-submit="Добавить {{ s.name }} в утверждённые цели?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><input type="hidden" name="name" value="{{ s.name }}">
+            <button class="btn-ghost btn-sm" title="Добавить в цели">{{ icon('plus', 'h-4 w-4') }} в цели</button></form></td>
+          {% endif %}
+        </tr>
+      {% else %}
+        <tr data-empty><td colspan="4" class="py-6 text-center muted">Поддомены не обнаружены</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro web_table(rows) -%}
+<div class="table-wrap">
+  <table class="table" data-table>
+    <thead><tr><th data-sort>URL</th><th data-sort>Код</th><th>Сервер / технологии</th><th>Заголовки безопасности</th><th>HTTPS</th></tr></thead>
+    <tbody>
+    {% for w in rows %}
+      <tr>
+        <td class="max-w-xs text-xs">
+          <div class="break-all font-mono">{{ w.url }}</div>
+          {% if w.final_url and w.final_url != w.url %}<div class="break-all muted">→ {{ w.final_url }}</div>{% endif %}
+          {% if w.title %}<div class="mt-0.5 truncate">«{{ w.title }}»</div>{% endif %}
+          {% if w.error %}<div class="text-red-600 dark:text-red-400">{{ w.error }}</div>{% endif %}
+        </td>
+        <td class="tabular-nums">{{ w.status_code or '—' }}</td>
+        <td class="text-xs">{% if w.server %}<div class="font-mono">{{ w.server }}</div>{% endif %}
+          {% for t in w.technologies %}<span class="badge-accent mb-1 mr-1">{{ t }}</span>{% endfor %}</td>
+        <td class="text-xs">
+          {% for name, info in (w.security_headers or {}).items() %}
+          <div class="flex items-center gap-1">{% if info.present %}<span class="text-emerald-600">✓</span>{% else %}<span class="text-amber-600">✗</span>{% endif %}<span class="{{ '' if info.present else 'muted' }}">{{ name }}</span></div>
+          {% endfor %}
+        </td>
+        <td>{% if w.url.startswith('https') %}<span class="badge-green">HTTPS</span>{% else %}{{ ok_bad(w.redirects_to_https, 'Редирект', 'Нет редиректа') }}{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{%- endmacro %}
+
+{% macro tls_table(rows) -%}
+<div class="table-wrap">
+  <table class="table" data-table>
+    <thead><tr><th data-sort>Узел</th><th>Сертификат</th><th data-sort>Осталось дней</th><th>Цепочка</th><th>Протоколы</th><th>Слабые шифры</th></tr></thead>
+    <tbody>
+    {% for t in rows %}
+      {% set c = t.certificate or {} %}
+      <tr>
+        <td class="whitespace-nowrap font-mono text-xs">{{ t.host }}:{{ t.port }}{% if c.negotiated_protocol %}<div class="muted">{{ c.negotiated_protocol }} · {{ c.negotiated_cipher }}</div>{% endif %}</td>
+        <td class="max-w-xs text-xs">
+          {% if t.error %}<span class="text-red-600 dark:text-red-400">{{ t.error }}</span>{% else %}
+          <div class="font-medium">{{ c.subject }}</div>
+          <div class="muted">Издатель: {{ c.issuer }}</div>
+          <div class="muted">{{ c.key_type }} {{ c.key_size }} · {{ c.signature }}</div>
+          {% if c.san %}<details><summary class="cursor-pointer text-accent-600 dark:text-accent-400">SAN ({{ c.san|length }})</summary><div class="mono">{{ c.san|join(', ') }}</div></details>{% endif %}
+          {% endif %}
+        </td>
+        <td data-value="{{ c.days_left if c.days_left is defined else 9999 }}">{% if c.days_left is defined %}<span class="{{ 'sev-critical' if c.days_left < 14 else ('sev-medium' if c.days_left < 30 else 'badge-green') }}">{{ c.days_left }}</span>{% else %}—{% endif %}</td>
+        <td class="text-xs">{{ ok_bad(t.chain_valid, 'Доверена', 'Ошибка', 'Не проверена') }}{% if t.chain_error %}<div class="mt-1 muted">{{ t.chain_error }}</div>{% endif %}
+          {% if c.chain %}<details class="mt-1"><summary class="cursor-pointer text-accent-600 dark:text-accent-400">Цепочка ({{ c.chain|length }})</summary>
+            <ol class="ml-4 list-decimal">{% for x in c.chain %}<li>{{ x.subject }} <span class="muted">← {{ x.issuer }}</span></li>{% endfor %}</ol></details>{% endif %}</td>
+        <td class="whitespace-nowrap text-xs">
+          {% for p, v in (t.protocols or {}).items() %}
+          <div>{% if v is none %}<span class="muted">? {{ p }}</span>{% elif v %}<span class="{{ 'text-amber-600 font-medium' if p in ('TLSv1.0', 'TLSv1.1') else 'text-emerald-600' }}">✓ {{ p }}</span>{% else %}<span class="muted">✗ {{ p }}</span>{% endif %}</div>
+          {% endfor %}
+        </td>
+        <td class="text-xs">
+          {% set acc = (t.ciphers or {}).items()|selectattr(1)|list %}
+          {% for g, v in acc %}<span class="sev-medium mb-1 mr-1">{{ g }}</span>{% else %}{% if t.ciphers %}<span class="badge-green">не обнаружены</span>{% endif %}{% endfor %}
+          {% set untested = (t.ciphers or {}).items()|selectattr(1, 'none')|map(attribute=0)|list %}
+          {% if untested %}<div class="mt-1 muted" title="Локальная библиотека OpenSSL не поддерживает эти шифры">не проверено: {{ untested|join(', ') }}</div>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{%- endmacro %}

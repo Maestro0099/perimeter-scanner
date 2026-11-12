@@ -1,0 +1,27 @@
+# Пример файла целей. Скопируйте в targets.yaml и укажите ресурсы СВОЕЙ организации.
+# targets.yaml не хранится в репозитории (.gitignore).
+# Здесь используются только зарезервированные для документации адреса и домены
+# (RFC 5737: 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24; RFC 2606: example.*).
+
+groups:
+  - name: Основной офис
+    description: Публичные адреса головного офиса
+    targets:
+      - value: 203.0.113.10
+        description: Пограничный маршрутизатор
+        tags: [edge, prod]
+      - value: 203.0.113.16/29
+        description: DMZ
+        tags: [dmz]
+
+  - name: Веб-сервисы
+    description: Сайты и публичные приложения
+    targets:
+      - value: example.com
+        tags: [web, prod]
+      - value: portal.example.org
+        tags: [web]
+
+# Цели без группы
+targets:
+  - 198.51.100.25

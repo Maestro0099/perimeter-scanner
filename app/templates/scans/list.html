@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon, flash, status_badge, empty_row %}
+{% block title %}Сканирования{% endblock %}
+{% block content %}
+{{ flash(msg, err) }}
+<div class="card" data-table-wrap>
+  <div class="card-header">
+    <div class="flex flex-wrap items-center gap-2">
+      <input type="search" data-table-search class="input w-52" placeholder="Поиск…" aria-label="Поиск">
+      <select data-table-filter="status" class="input w-auto" aria-label="Статус">
+        <option value="">Все статусы</option>
+        {% for k, l in STATUS_LABELS.items() %}<option value="{{ k }}">{{ l }}</option>{% endfor %}
+      </select>
+      <select data-table-filter="profile" class="input w-auto" aria-label="Профиль">
+        <option value="">Все профили</option>
+        {% for k, l in PROFILE_LABELS.items() if k != 'checks' %}<option value="{{ k }}">{{ l }}</option>{% endfor %}
+      </select>
+    </div>
+    {% if user.is_admin %}<a href="/scans/new" class="btn-primary">{{ icon('play', 'h-4 w-4') }} Новое сканирование</a>{% endif %}
+  </div>
+  <div class="table-wrap">
+    <table class="table" data-table>
+      <thead><tr>
+        <th data-sort>№</th><th data-sort>Создан</th><th data-sort>Профиль</th><th>Цели</th><th data-sort>Статус</th>
+        <th data-sort>Длительность</th><th>Находки</th><th data-sort>Запустил</th>
+      </tr></thead>
+      <tbody>
+      {% for s in scans %}
+        {% set c = counts.get(s.id, {}) %}
+        <tr data-status="{{ s.status }}" data-profile="{{ s.profile }}">
+          <td data-value="{{ s.id }}"><a href="/scans/{{ s.id }}" class="font-medium">#{{ s.id }}</a></td>
+          <td class="whitespace-nowrap text-xs" data-value="{{ s.created_at.isoformat() }}">{{ s.created_at|dt }}</td>
+          <td><span class="{{ 'sev-high' if s.profile == 'aggressive' else 'badge-neutral' }}">{{ PROFILE_LABELS.get(s.profile, s.profile) }}</span> <span class="text-xs muted">-T{{ s.timing }}</span></td>
+          <td class="max-w-xs text-xs">
+            {% if s.group %}<span class="font-medium">{{ s.group.name }}</span>: {% endif %}
+            {% for t in s.targets[:3] %}<span class="font-mono">{{ t.value }}</span>{{ ', ' if not loop.last }}{% endfor %}{% if s.targets|length > 3 %} <span class="muted">и ещё {{ s.targets|length - 3 }}</span>{% endif %}
+          </td>
+          <td>
+            {{ status_badge(s.status) }}
+            {% if s.is_active %}<div class="progress mt-1 w-24"><span style="width: {{ s.progress }}%"></span></div>{% endif %}
+          </td>
+          <td class="whitespace-nowrap text-xs" data-value="{{ s.duration_seconds or 0 }}">{{ s.duration_seconds|duration }}</td>
+          <td class="whitespace-nowrap">
+            {% for sev in ['critical', 'high', 'medium', 'low'] if c.get(sev) %}<span class="sev-{{ sev }} mr-1" title="{{ SEVERITY_LABELS[sev] }}">{{ c[sev] }}</span>{% endfor %}
+            {% if not c %}<span class="text-xs muted">—</span>{% endif %}
+          </td>
+          <td class="text-xs">{{ s.started_by }}{% if s.trigger == 'schedule' %} <span class="badge-neutral">{{ icon('clock', 'h-3 w-3') }} расписание</span>{% endif %}</td>
+        </tr>
+      {% else %}
+        {{ empty_row(8, "Сканирований ещё не было") }}
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

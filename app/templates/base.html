@@ -1,0 +1,92 @@
+{% from "partials/icons.html" import icon %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token(request) }}">
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false}'>
+  <title>{% block title %}{% endblock %} · {{ app_name }}</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/static/js/theme.js"></script>
+  <script src="/static/js/htmx.min.js" defer></script>
+  <script src="/static/js/chart.umd.js" defer></script>
+  <script src="/static/js/app.js" defer></script>
+</head>
+<body class="min-h-screen">
+{% set path = request.url.path %}
+{% macro nav(href, label, ico, exact=False) -%}
+  {% set active = (path == href) if exact else (path == href or path.startswith(href ~ '/')) %}
+  <a href="{{ href }}" class="nav-link {{ 'active' if active }}" {% if active %}aria-current="page"{% endif %}>{{ icon(ico) }}<span>{{ label }}</span></a>
+{%- endmacro %}
+<div class="flex min-h-screen">
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 flex hidden w-64 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950/95 lg:flex">
+    <div class="flex h-16 items-center gap-3 border-b border-slate-200 px-5 dark:border-slate-800">
+      <span class="radar h-9 w-9 shrink-0" aria-hidden="true"></span>
+      <div class="leading-tight">
+        <div class="font-mono text-[13px] font-semibold uppercase tracking-wider text-slate-900 dark:text-white">{{ app_name }}</div>
+        <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-accent-700 dark:text-accent-400">attack surface</div>
+      </div>
+      <button type="button" data-menu-toggle class="btn-ghost ml-auto lg:hidden" aria-label="Закрыть меню">{{ icon('x') }}</button>
+    </div>
+    <nav class="flex-1 space-y-0.5 overflow-y-auto px-3 py-3">
+      {{ nav('/', 'Обзор', 'home', True) }}
+      <div class="nav-section">Периметр</div>
+      {{ nav('/targets', 'Цели', 'target') }}
+      {{ nav('/scans', 'Сканирования', 'radar') }}
+      {{ nav('/assets/ip', 'IP-адреса', 'server') }}
+      {{ nav('/assets/domain', 'Домены', 'globe') }}
+      {{ nav('/findings', 'Находки', 'alert') }}
+      {{ nav('/changes', 'Изменения', 'diff') }}
+      {{ nav('/reports', 'Отчёты', 'doc') }}
+      {% if user and user.is_admin %}
+      <div class="nav-section">Администрирование</div>
+      {{ nav('/schedules', 'Расписание', 'clock') }}
+      {{ nav('/settings', 'Уведомления', 'bell') }}
+      {{ nav('/users', 'Пользователи', 'users') }}
+      {{ nav('/audit', 'Журнал аудита', 'list') }}
+      {% endif %}
+    </nav>
+    {% if user %}
+    <div class="flex items-center gap-2 border-t border-slate-200 px-5 py-2.5 font-mono text-[10px] uppercase tracking-wider text-slate-500 dark:border-slate-800">
+      <span class="live-dot"></span><span>система активна</span>
+    </div>
+    <div class="border-t border-slate-200 p-3 dark:border-slate-800">
+      <div class="flex items-center gap-2">
+        <a href="/account" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent-100 font-mono text-sm font-semibold uppercase text-accent-800 dark:bg-accent-400/15 dark:text-accent-300">{{ user.username[:1] }}</span>
+          <span class="min-w-0">
+            <span class="block truncate text-sm font-medium text-slate-900 dark:text-white">{{ user.username }}</span>
+            <span class="block text-[11px] muted">{{ 'Администратор' if user.is_admin else 'Только просмотр' }}</span>
+          </span>
+        </a>
+        <form method="post" action="/logout">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+          <button class="btn-ghost" title="Выйти" aria-label="Выйти">{{ icon('logout') }}</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </aside>
+
+  <div class="flex min-w-0 flex-1 flex-col lg:pl-64">
+    <header class="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/80 px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80 sm:px-6">
+      <button type="button" data-menu-toggle class="btn-ghost lg:hidden" aria-label="Меню">{{ icon('menu') }}</button>
+      <div class="min-w-0 flex-1">
+        {% block breadcrumbs %}{% endblock %}
+        <h1 class="truncate">{{ self.title() }}</h1>
+      </div>
+      <div id="scan-indicator" hx-get="/scans/indicator" hx-trigger="load, every 5s" hx-swap="innerHTML"></div>
+      <button type="button" data-theme-toggle class="btn-ghost" title="Сменить тему" aria-label="Сменить тему">
+        <span class="dark:hidden">{{ icon('moon') }}</span><span class="hidden dark:inline">{{ icon('sun') }}</span>
+      </button>
+    </header>
+    <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">
+      {% block content %}{% endblock %}
+    </main>
+    <footer class="px-6 pb-6 text-center font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-600">внутренний инструмент · сканируются только утверждённые цели организации</footer>
+  </div>
+</div>
+</body>
+</html>

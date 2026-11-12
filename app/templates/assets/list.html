@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import empty_row %}
+{% block title %}{{ 'IP-адреса' if kind == 'ip' else 'Домены' }}{% endblock %}
+{% block content %}
+<div class="card" data-table-wrap>
+  <div class="card-header">
+    <div class="flex flex-wrap items-center gap-2">
+      <input type="search" data-table-search class="input w-56" placeholder="Поиск…" aria-label="Поиск">
+      <select data-table-filter="sev" class="input w-auto" aria-label="Максимальный уровень">
+        <option value="">Любой уровень</option>
+        {% for s in SEVERITY_ORDER_LIST %}<option value="{{ s }}">{{ SEVERITY_LABELS[s] }}</option>{% endfor %}
+      </select>
+    </div>
+    <span class="text-xs muted">Показано: <span data-table-count>0</span> из {{ assets|length }}</span>
+  </div>
+  <div class="table-wrap">
+    <table class="table" data-table>
+      <thead><tr>
+        <th data-sort>{{ 'IP-адрес' if kind == 'ip' else 'Домен' }}</th>
+        {% if kind == 'ip' %}<th>Имена</th><th data-sort>ОС</th><th data-sort>Открытые порты</th>{% else %}<th data-sort>Поддомены</th>{% endif %}
+        <th data-sort>Риск</th>
+        {% for s in ['critical','high','medium','low'] %}<th data-sort class="text-center">{{ SEVERITY_LABELS[s][:4] }}.</th>{% endfor %}
+        <th data-sort>Скан</th>
+      </tr></thead>
+      <tbody>
+      {% for a in assets %}
+        <tr data-sev="{{ a.max_severity }}">
+          <td><a href="/assets/{{ a.type }}/{{ a.asset }}" class="font-mono font-medium">{{ a.asset }}</a></td>
+          {% if kind == 'ip' %}
+          <td class="max-w-xs truncate text-xs">{{ a.hostnames|join(', ') or '—' }}</td>
+          <td class="text-xs">{{ a.os or '—' }}</td>
+          <td class="tabular-nums" data-value="{{ a.open_ports }}">{{ a.open_ports }}</td>
+          {% else %}
+          <td class="tabular-nums" data-value="{{ a.subdomains or 0 }}">{{ a.subdomains or 0 }}</td>
+          {% endif %}
+          <td data-value="{{ a.risk_weight }}"><span class="sev-{{ a.max_severity }}">{{ SEVERITY_LABELS[a.max_severity] }}</span></td>
+          {% for s in ['critical','high','medium','low'] %}<td class="text-center tabular-nums" data-value="{{ a.counts[s] }}">{% if a.counts[s] %}<span class="sev-{{ s }}">{{ a.counts[s] }}</span>{% else %}<span class="muted">·</span>{% endif %}</td>{% endfor %}
+          <td class="text-xs" data-value="{{ a.last_scan or 0 }}">{% if a.last_scan %}<a href="/scans/{{ a.last_scan }}">#{{ a.last_scan }}</a>{% else %}—{% endif %}</td>
+        </tr>
+      {% else %}
+        {{ empty_row(10, "Нет данных — запустите сканирование") }}
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

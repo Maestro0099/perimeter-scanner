@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon, flash, csrf_input %}
+{% block title %}Пользователи{% endblock %}
+{% block content %}
+{{ flash(msg, err) }}
+<div class="grid gap-6 xl:grid-cols-3">
+  <div class="card xl:col-span-2">
+    <div class="card-header"><h2>Учётные записи</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Логин</th><th>Роль / статус</th><th>Последний вход</th><th>Новый пароль</th><th></th></tr></thead>
+        <tbody>
+        {% for u in users %}
+          <tr>
+            <td class="font-medium">{{ u.username }}{% if u.id == user.id %} <span class="text-xs muted">(вы)</span>{% endif %}</td>
+            <td colspan="3">
+              <form method="post" action="/users/{{ u.id }}/update" class="flex flex-wrap items-center gap-2" id="uf{{ u.id }}">
+                {{ csrf_input(request) }}
+                <select name="role" class="input w-auto">
+                  <option value="admin" {{ 'selected' if u.role == 'admin' }}>Администратор</option>
+                  <option value="viewer" {{ 'selected' if u.role == 'viewer' }}>Только просмотр</option>
+                </select>
+                <label class="flex items-center gap-1 text-xs"><input type="checkbox" name="is_active" class="checkbox" {{ 'checked' if u.is_active }}> активен</label>
+                <span class="text-xs muted w-28">{{ u.last_login|dt }}</span>
+                <input type="password" name="new_password" class="input w-40" placeholder="не менять" autocomplete="new-password" maxlength="256">
+                <button class="btn-secondary btn-sm">Сохранить</button>
+              </form>
+            </td>
+            <td class="text-right">
+              {% if u.id != user.id %}
+              <form method="post" action="/users/{{ u.id }}/delete" data-confirm-submit="Удалить пользователя {{ u.username }}?">
+                {{ csrf_input(request) }}<button class="btn-ghost btn-sm text-red-600" aria-label="Удалить">{{ icon('trash', 'h-4 w-4') }}</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <form method="post" action="/users" class="card">
+    {{ csrf_input(request) }}
+    <div class="card-header"><h2>Новый пользователь</h2></div>
+    <div class="card-body space-y-3">
+      <div><label class="label" for="nu">Логин</label><input id="nu" name="username" class="input" required maxlength="64" autocomplete="off"></div>
+      <div><label class="label" for="np">Пароль</label><input id="np" type="password" name="password" class="input" required maxlength="256" autocomplete="new-password">
+        <p class="mt-1 text-xs muted">Не короче 12 символов, минимум 3 типа символов.</p></div>
+      <div><label class="label" for="nr">Роль</label>
+        <select id="nr" name="role" class="input"><option value="viewer">Только просмотр</option><option value="admin">Администратор</option></select></div>
+      <button class="btn-primary w-full">{{ icon('plus', 'h-4 w-4') }} Создать</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

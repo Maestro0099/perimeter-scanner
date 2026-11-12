@@ -1,0 +1,44 @@
+services:
+  app:
+    build: .
+    image: perimeter-scanner:latest
+    container_name: perimeter-scanner
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: "8000"
+      DATA_DIR: /app/data
+      TARGETS_FILE: /app/targets.yaml
+    ports:
+      # По умолчанию интерфейс доступен только с самой ВМ (127.0.0.1).
+      - "${BIND_ADDRESS:-127.0.0.1}:${BIND_PORT:-8000}:8000"
+    volumes:
+      - perimeter-data:/app/data
+      # Необязательно: файл целей, импортируется при запуске (создайте из targets.example.yaml)
+      - ./targets.yaml:/app/targets.yaml:ro
+    # Минимальные привилегии: всё отключено, кроме того, что нужно nmap
+    # для SYN/UDP-сканирования и определения ОС. Эти capabilities выданы
+    # только бинарнику nmap (setcap в Dockerfile); процесс приложения
+    # работает от непривилегированного пользователя app (uid 10001).
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    # no-new-privileges не используется намеренно: он блокирует file capabilities nmap.
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  perimeter-data:

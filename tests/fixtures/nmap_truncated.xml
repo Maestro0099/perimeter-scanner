@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<?xml-stylesheet href="file:///usr/bin/../share/nmap/nmap.xsl" type="text/xsl"?>
+<nmaprun scanner="nmap" args="nmap -sS -sU -p T:1-65535,U:53,161 -sV -O --script vulners -oX - -iL targets.txt" start="1762981200" startstr="Wed Nov 12 21:00:00 2025" version="7.94" xmloutputversion="1.05">
+<scaninfo type="syn" protocol="tcp" numservices="65535" services="1-65535"/>
+<scaninfo type="udp" protocol="udp" numservices="2" services="53,161"/>
+<verbose level="0"/>
+<debugging level="0"/>
+<host starttime="1762981201" endtime="1762981500"><status state="up" reason="echo-reply" reason_ttl="52"/>
+<address addr="203.0.113.10" addrtype="ipv4"/>
+<hostnames>
+<hostname name="example.com" type="user"/>
+<hostname name="www.example.com" type="PTR"/>
+</hostnames>
+<ports><extraports state="filtered" count="65529">
+<extrareasons reason="no-response" count="65529" proto="tcp" ports="1-20,23-79"/>
+</extraports>
+<port protocol="tcp" portid="21"><state state="open" reason="syn-ack" reason_ttl="52"/><service name="ftp" product="vsftpd" version="2.3.4" ostype="Unix" method="probed" conf="10"><cpe>cpe:/a:vsftpd:vsftpd:2.3.4</cpe></service><script id="ftp-anon" output="Anonymous FTP login allowed (FTP code 230)&#xa;drwxr-xr-x    2 0        0            4096 Jan 01  2020 pub"/></port>
+<port protocol="tcp" portid="22"><state state="open" reason="syn-ack" reason_ttl="52"/><service name="ssh" product="OpenSSH" version="8.9p1 Ubuntu 3ubuntu0.6" extrainfo="Ubuntu Linux; protocol 2.0" ostype="Linux" method="probed" conf="10"><cpe>cpe:/a:openbsd:openssh:8.9p1</cpe><cpe>cpe:/o:linux:linux_kernel</cpe></service><script id="vulners" output="&#xa;  cpe:/a:openbsd:openssh:8.9p1: &#xa;    &#x9;CVE-2023-38408&#x9;9.8&#x9;https://vulners.com/cve/CVE-2023-38408&#xa;    &#x9;CVE-2023-28531&#x9;9.8&#x9;https://vulners.com/cve/CVE-2023-28531&#xa;    &#x9;PACKETSTORM:173661&#x9;9.8&#x9;https://vulners.com/packetstorm/PACKETSTORM:173661&#x9;*EXPLOIT*&#xa;    &#x9;CVE-2023-51385&#x9;6.5&#x9;https://vulners.com/cve/CVE-2023-51385"><table key="cpe:/a:openbsd:openssh:8.9p1">
+<table>
+<elem key="is_exploit">false</elem>
+<elem key="cvss">9.8</elem>
+<elem key="id">CVE-2023-38408</elem>
+<elem key="type">cve</elem>
+</table>
+<table>
+<elem key="is_exploit">false</elem>
+<elem key="cvss">9.8</elem>
+<elem key="id">CVE-2023-28531</elem>
+<elem key="type">cve</elem>
+</table>
+<table>
+<elem key="is_exploit">true</elem>
+<elem key="cvss">9.8</elem>
+<elem key="id">PACKETSTORM:173661</elem>
+<elem key="type">packetstorm</elem>
+</table>
+<table>
+<elem key="is_exploit">false</elem>
+<elem key="cvss">6.5</elem>
+<elem key="id">CVE-2023-51385</elem>
+<elem key="type">cve</elem>
+</table>
+</table>
+</script><script id="ssh-auth-methods" output="&#xa;  Supported authentication methods: &#xa;    publickey&#xa;    password"><table key="Supported authentication methods">
+<elem>publickey</elem>
+<elem>password</elem>
+</table>
+</script></port>
+<port protocol="tcp" portid="80"><state state="open" reason="syn-ack" reason_ttl="52"/><service name="http" product="nginx" version="1.18.0" extrainfo="Ubuntu" ostype="Linux" method="probed" conf="10"><cpe>cpe:/a:igor_sysoev:nginx:1.18.0</cpe><cpe>cpe:/o:linux:linux_kernel</cpe></service><script id="http-title" output="Did not follow redirect to https://example.com/"><elem key="redirect_url">https://example.com/</elem>
+</script><script id="http-server-header" output="nginx/1.18.0 (Ubuntu)"><elem>nginx/1.18.0 (Ubuntu)</elem>
+</script></port>
+<port protocol="tcp" portid="443"><state state="open" reason="syn-ack" reason_ttl="52"/><service name="http" product="nginx" version="1.18.0" extrainfo="Ubuntu" tunnel="ssl" ostype="Linux" method="probed" conf="10"><cpe>cpe:/a:igor_sysoev:nginx:1.18.0</cpe></service><script id="ssl-heartbleed" output="&#xa;  VULNERABLE:&#xa;  The Heartbleed Bug is a serious vulnerability in the popular OpenSSL cryptographic software library.&#xa;    State: VULNERABLE&#xa;    Risk factor: High&#xa;    IDs:  CVE:CVE-2014-0160"><table key="NMAP-1">
+<elem key="title">The Heartbleed Bug is a serious vulnerability in the popular OpenSSL cryptographic software library.</elem>
+<elem key="state">VULNERABLE</elem>
+<table key="ids">
+<elem>CVE:CVE-2014-0160</elem>
+</table>
+<table key="description">
+<elem>OpenSSL versions 1.0.1 and 1.0.2-beta releases (including 1.0.1f and 1.0.2-beta1) of OpenSSL are affected by the Heartbleed bug.</elem>
+</table>
+<table key="dates">
+<table key="disclosure">
+<elem key="year">2014</elem>
+<elem key="month">04</elem>
+<elem key="day">07</elem>
+</table>
+</table>
+<elem key="disclosure">2014-04-07</elem>
+<table key="refs">
+<elem>https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2014-0160</elem>
+</table>
+</table>
+</script><script id="ssl-dh-params" output="&#xa;  NOT VULNERABLE:&#xa;  Diffie-Hellman Key Exchange Insufficient Group Strength"><table key="NMAP-2">
+<elem key="title">Diffie-Hellman Key Exchange Insufficient Group Strength</elem>
+<elem key="state">NOT VULNERABLE</elem>
+</table>
+</script></port>
+<port protocol="tcp" portid="3306"><state state="open" reason="syn-ack" reason_ttl="52"/><service name="mysql" product="MySQL" version="5.7.33" method="probed" conf="10"><cpe>cpe:/a:mysql:mysql:5.7.33</cpe></service></port>
+<port protocol="tcp" portid="445"><state state="closed" reason="reset" reason_ttl="52"/><service name="microsoft-ds" method="table" conf="3"/></port>
+<port protocol="udp" portid="53"><state state="open|filtered" reason="no-response" reason_ttl="0"/><service name="domain" method="table" conf="3"/></port>
+<port protocol="udp" portid="161"><state state="open" reason="udp-response" reason_ttl="52"/><service name="snmp" product="net-snmp" version="SNMPv3 server" method="probed" conf="10"/><script id="snmp-sysdescr" output="Linux edge 5.15.0-91-generic #101-Ubuntu SMP x86_64&#xa;  System uptime: 10d 3h"/></port>
+</ports>
+<os><portused state="open" proto="tcp" portid="22"/>
+<osmatch name="Linux 5.0 - 5.14" accuracy="95" line="67000">
+<osclass type="general purpose" vendor="Linux" osfamily="Linux" osgen="5.X" accuracy="95"><cpe>cpe:/o:linux:linux_kernel:5</cpe></osclass>
+</osmatch>
+<osmatch name="Linux 4.15 - 5.8" accuracy="91" line="66000"/>
+</os>
+<hostscript><script id="whois-ip" output="Record found at whois.ripe.net"/></hostscript>
+<times srtt="23456" rttvar="1234" to="100000"/>
+</host>
+<host starttime="1762981201" endtime="1762981400"><status state="up" reason="user-set" reason_ttl="0"/>
+<address addr="203.0.113.11" addrtype="ipv4"/>
+<hostnames/>
+<ports><extraports state="filtered" count="65535"/>
+<port protocol="tcp" portid="3389"><state state="open" reason="syn-ack" reason_ttl="116"/><service name="ms-wbt-server" product="Microsoft Terminal Services" ostype="Windows" method="probed" conf="10"><cpe>cpe:/o:microsoft:windows</cpe></service></port>
+<port protocol="tcp" 

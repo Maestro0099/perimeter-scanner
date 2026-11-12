@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon, flash, csrf_input %}
+{% block title %}Уведомления и параметры{% endblock %}
+{% block content %}
+{{ flash(msg, err) }}
+<div class="grid gap-6 xl:grid-cols-3">
+  <form method="post" action="/settings" class="card xl:col-span-2">
+    {{ csrf_input(request) }}
+    <div class="card-header"><h2>Уведомления о новых находках</h2></div>
+    <div class="card-body space-y-5">
+      <div class="grid gap-4 sm:grid-cols-2">
+        <label class="flex items-start gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <input type="checkbox" name="notify_telegram" class="checkbox mt-0.5" {{ 'checked' if rs.notify_telegram }}>
+          <span><span class="block text-sm font-medium">Telegram-бот</span>
+            <span class="block text-xs muted">{% if telegram_ok %}<span class="text-emerald-600">Настроен</span> (токен и chat_id заданы в .env){% else %}<span class="text-amber-600">Не настроен:</span> задайте TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID в .env{% endif %}</span></span>
+        </label>
+        <label class="flex items-start gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <input type="checkbox" name="notify_email" class="checkbox mt-0.5" {{ 'checked' if rs.notify_email }}>
+          <span><span class="block text-sm font-medium">Электронная почта</span>
+            <span class="block text-xs muted">{% if email_ok %}<span class="text-emerald-600">Настроена</span>: {{ env.smtp_host }} → {{ env.smtp_to }}{% else %}<span class="text-amber-600">Не настроена:</span> задайте SMTP_* в .env{% endif %}</span></span>
+        </label>
+      </div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div><label class="label" for="ms">Минимальный уровень для уведомления</label>
+          <select id="ms" name="notify_min_severity" class="input">{% for s in SEVERITY_ORDER_LIST %}<option value="{{ s }}" {{ 'selected' if rs.notify_min_severity == s }}>{{ SEVERITY_LABELS[s] }} и выше</option>{% endfor %}</select></div>
+        <label class="flex items-center gap-2 self-end pb-2 text-sm"><input type="checkbox" name="notify_on_failure" class="checkbox" {{ 'checked' if rs.notify_on_failure }}> Сообщать об ошибках сканирования</label>
+      </div>
+      <p class="text-xs muted">Уведомление отправляется после завершения скана, если появились находки, которых не было в предыдущих сканах этих целей, или значимые изменения (новые порты, уязвимости, поддомены, хосты).</p>
+
+      <hr class="border-slate-200 dark:border-slate-800">
+      <h2>Параметры сканирования</h2>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div><label class="label" for="t">Скорость по умолчанию (-T)</label>
+          <select id="t" name="nmap_timing" class="input">{% for t in range(6) %}<option value="{{ t }}" {{ 'selected' if rs.nmap_timing == t }}>T{{ t }}{{ ' — рекомендуется' if t == 4 }}</option>{% endfor %}</select>
+          <p class="mt-1 text-xs muted">Используется для сканов по расписанию и как значение по умолчанию при ручном запуске.</p></div>
+        <div><label class="label" for="mp">Лимит параллельных сканов</label>
+          <input id="mp" type="number" name="max_parallel_scans" min="1" max="16" value="{{ rs.max_parallel_scans }}" class="input">
+          <p class="mt-1 text-xs muted">Остальные сканы ждут в очереди. Применяется сразу.</p></div>
+      </div>
+      <div class="flex justify-end"><button class="btn-primary">Сохранить</button></div>
+    </div>
+  </form>
+
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header"><h2>Проверка каналов</h2></div>
+      <div class="card-body flex flex-wrap gap-2">
+        <form method="post" action="/settings/test">{{ csrf_input(request) }}<input type="hidden" name="channel" value="telegram"><button class="btn-secondary" {{ 'disabled' if not telegram_ok }}>{{ icon('bell', 'h-4 w-4') }} Тест Telegram</button></form>
+        <form method="post" action="/settings/test">{{ csrf_input(request) }}<input type="hidden" name="channel" value="email"><button class="btn-secondary" {{ 'disabled' if not email_ok }}>{{ icon('bell', 'h-4 w-4') }} Тест e-mail</button></form>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h2>Окружение</h2></div>
+      <dl class="card-body grid grid-cols-2 gap-y-1.5 text-sm">
+        <dt class="muted">nmap</dt><dd>{% if nmap_ok %}<span class="badge-green">найден</span>{% else %}<span class="sev-critical">не найден</span>{% endif %}</dd>
+        <dt class="muted">Режим nmap</dt><dd>{{ 'привилегированный (SYN, UDP, -O)' if env.nmap_privileged else 'TCP connect' }}</dd>
+        <dt class="muted">Две фазы</dt><dd>{{ 'включены' if env.nmap_two_phase else 'выключены' }}</dd>
+        <dt class="muted">Скорость</dt><dd>min-rate {{ env.nmap_min_rate or '—' }} · retries {{ env.nmap_max_retries }} · hostgroup {{ env.nmap_min_hostgroup }}</dd>
+        <dt class="muted">Область (scope)</dt><dd class="break-all text-xs">{{ env.allowed_scope or 'не ограничена' }}</dd>
+        <dt class="muted">Таймаут скана</dt><dd>{{ env.scan_timeout_minutes }} мин</dd>
+        <dt class="muted">crt.sh</dt><dd>{{ 'включён' if env.crtsh_enabled else 'выключен' }}</dd>
+        <dt class="muted">Перебор поддоменов</dt><dd>{{ 'включён' if env.subdomain_bruteforce else 'выключен' }}</dd>
+        <dt class="muted">Часовой пояс</dt><dd>{{ env.timezone }}</dd>
+      </dl>
+      <p class="px-4 pb-4 text-xs muted">Секреты и параметры окружения меняются только в файле .env (с перезапуском контейнера).</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

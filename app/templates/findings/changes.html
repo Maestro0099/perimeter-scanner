@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "partials/tables.html" import changes_list %}
+{% block title %}Изменения{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <h2>Лента изменений периметра</h2>
+    <form method="get" class="flex gap-2">
+      <select name="severity" class="input w-auto" aria-label="Уровень">
+        <option value="">Все уровни</option>
+        {% for s in SEVERITY_ORDER_LIST %}<option value="{{ s }}" {{ 'selected' if f_severity == s }}>{{ SEVERITY_LABELS[s] }}</option>{% endfor %}
+      </select>
+      <button class="btn-secondary">Фильтр</button>
+    </form>
+  </div>
+  {{ changes_list(changes, show_scan=True) }}
+  <div class="flex items-center justify-between border-t border-slate-200 px-4 py-2 dark:border-slate-800">
+    <span class="text-xs muted">Страница {{ page }}</span>
+    <div class="flex gap-2">
+      {% if page > 1 %}<a class="btn-secondary btn-sm" href="?page={{ page - 1 }}&severity={{ f_severity|urlencode }}">← Новее</a>{% endif %}
+      {% if has_next %}<a class="btn-secondary btn-sm" href="?page={{ page + 1 }}&severity={{ f_severity|urlencode }}">Старее →</a>{% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

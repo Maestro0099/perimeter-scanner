@@ -1,0 +1,167 @@
+{#- Автономный HTML-отчёт (также используется для PDF). Без внешних ресурсов. -#}
+{%- macro sev(s) -%}<span class="sev sev-{{ s }}">{{ SEVERITY_LABELS.get(s, s) }}</span>{%- endmacro -%}
+{%- macro ftable(findings) -%}
+<table>
+  <thead><tr><th>Уровень</th><th>Актив</th><th>Порт</th><th>Находка</th><th>CVSS</th><th>Рекомендация</th></tr></thead>
+  <tbody>
+  {%- for f in findings %}
+  {%- set f = f if f is mapping else {'severity': f.severity, 'asset': f.asset, 'port': f.port, 'protocol': f.protocol, 'title': f.title, 'cve': f.cve, 'cvss': f.cvss, 'recommendation': f.recommendation, 'description': f.description, 'category': f.category} %}
+  <tr>
+    <td>{{ sev(f.severity) }}</td>
+    <td class="mono">{{ f.asset }}</td>
+    <td class="mono">{{ (f.port ~ '/' ~ f.protocol) if f.port else '—' }}</td>
+    <td><b>{{ f.title }}</b><div class="muted">{{ CATEGORY_LABELS.get(f.category, f.category) }}</div>{% if f.description %}<div class="small">{{ f.description[:600] }}</div>{% endif %}</td>
+    <td>{{ '%.1f'|format(f.cvss) if f.cvss is not none else '—' }}</td>
+    <td class="small">{{ f.recommendation }}</td>
+  </tr>
+  {%- else %}<tr><td colspan="6" class="muted">Находок нет</td></tr>{% endfor %}
+  </tbody>
+</table>
+{%- endmacro -%}
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>{{ r.title }}</title>
+<style>
+  @page { size: A4 landscape; margin: 14mm 12mm; @bottom-right { content: "Стр. " counter(page) " из " counter(pages); font-size: 8pt; color: #64748b; } }
+  * { box-sizing: border-box; }
+  body { font-family: "DejaVu Sans", "Segoe UI", Roboto, Arial, sans-serif; font-size: 9.5pt; color: #0f172a; margin: 0; padding: 24px; background: #fff; }
+  h1 { font-size: 18pt; margin: 0 0 4px; }
+  h2 { font-size: 12.5pt; margin: 22px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #e2e8f0; }
+  .muted { color: #64748b; font-size: 8.5pt; }
+  .small { font-size: 8.5pt; color: #334155; white-space: pre-line; }
+  .mono { font-family: "DejaVu Sans Mono", Consolas, monospace; font-size: 8.5pt; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+  th { background: #f1f5f9; text-align: left; font-size: 8pt; text-transform: uppercase; letter-spacing: .03em; color: #475569; }
+  th, td { padding: 5px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  .sev { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 8pt; font-weight: bold; white-space: nowrap; border: 1px solid; }
+  .sev-critical { color: #991b1b; background: #fef2f2; border-color: #fca5a5; }
+  .sev-high { color: #9a3412; background: #fff7ed; border-color: #fdba74; }
+  .sev-medium { color: #92400e; background: #fffbeb; border-color: #fcd34d; }
+  .sev-low { color: #1e40af; background: #eff6ff; border-color: #93c5fd; }
+  .sev-info { color: #334155; background: #f8fafc; border-color: #cbd5e1; }
+  .cards { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; min-width: 120px; }
+  .card .v { font-size: 16pt; font-weight: bold; }
+  .card .l { font-size: 7.5pt; text-transform: uppercase; color: #64748b; }
+  .risk { border-left: 5px solid; }
+  .risk-low { border-left-color: #2563eb; } .risk-medium { border-left-color: #ca8a04; }
+  .risk-high { border-left-color: #ea580c; } .risk-critical { border-left-color: #b91c1c; }
+  .bl-critical { border-left: 4px solid #b91c1c; } .bl-high { border-left: 4px solid #ea580c; }
+  .bl-medium { border-left: 4px solid #ca8a04; } .bl-low { border-left: 4px solid #2563eb; } .bl-info { border-left: 4px solid #64748b; }
+  pre { white-space: pre-wrap; word-break: break-all; background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px; font-size: 7.5pt; margin: 2px 0; }
+  .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #4f46e5; padding-bottom: 10px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <div class="muted">{{ app_name }} · внутренний отчёт · для служебного пользования</div>
+    <h1>{{ r.title }}</h1>
+  </div>
+  <div class="muted">Сформирован: {{ r.generated_at|dt('%d.%m.%Y %H:%M') }}</div>
+</div>
+
+{% if r.kind == 'perimeter' %}
+{% set s = r.summary %}
+<div class="cards">
+  <div class="card risk risk-{{ s.risk.level }}"><div class="l">Общая оценка риска</div><div class="v">{{ s.risk.label }}</div><div class="muted">индекс {{ s.risk.index }} из 100</div></div>
+  <div class="card"><div class="l">Цели</div><div class="v">{{ s.targets }}</div></div>
+  <div class="card"><div class="l">Хосты</div><div class="v">{{ s.hosts }}</div></div>
+  <div class="card"><div class="l">Открытые порты</div><div class="v">{{ s.open_ports }}</div></div>
+  <div class="card"><div class="l">Домены</div><div class="v">{{ s.domains }}</div></div>
+  {% for sv in SEVERITY_ORDER_LIST %}<div class="card bl-{{ sv }}"><div class="l">{{ SEVERITY_LABELS[sv] }}</div><div class="v">{{ s.counts.get(sv, 0) }}</div></div>{% endfor %}
+</div>
+<p class="muted">Последний скан: {% if s.last_scan_id %}#{{ s.last_scan_id }}, {{ s.last_scan_at|dt }}{% else %}не проводился{% endif %}. Оценка учитывает актуальные результаты последних сканов по каждой цели.</p>
+
+<h2>Топ проблем</h2>
+{{ ftable(r.top_findings) }}
+
+<h2>Активы</h2>
+<table>
+  <thead><tr><th>Актив</th><th>Тип</th><th>Открытые порты</th>{% for sv in SEVERITY_ORDER_LIST %}<th>{{ SEVERITY_LABELS[sv] }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for a in r.assets %}
+  <tr class="bl-{{ a.max_severity }}"><td class="mono">{{ a.asset }}</td><td>{{ 'IP' if a.type == 'ip' else 'Домен' }}</td><td>{{ a.open_ports or '—' }}</td>
+    {% for sv in SEVERITY_ORDER_LIST %}<td>{{ a.counts[sv] or '' }}</td>{% endfor %}</tr>
+  {% else %}<tr><td colspan="8" class="muted">Нет данных</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+<h2>Динамика по сканам</h2>
+<table>
+  <thead><tr><th>Скан</th><th>Дата</th><th>Профиль</th>{% for sv in SEVERITY_ORDER_LIST %}<th>{{ SEVERITY_LABELS[sv] }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for t in r.trend|reverse %}<tr><td>#{{ t.scan_id }}</td><td>{{ t.date|dt }}</td><td>{{ PROFILE_LABELS.get(t.profile, t.profile) }}</td>{% for sv in SEVERITY_ORDER_LIST %}<td>{{ t.counts[sv] }}</td>{% endfor %}</tr>
+  {% else %}<tr><td colspan="8" class="muted">Нет данных</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+<h2>Последние изменения</h2>
+<table>
+  <thead><tr><th>Дата</th><th>Уровень</th><th>Актив</th><th>Изменение</th></tr></thead>
+  <tbody>
+  {% for c in r.changes[:50] %}<tr><td>{{ c.date|dt }}</td><td>{{ sev(c.severity) }}</td><td class="mono">{{ c.asset }}</td><td>{{ CHANGE_LABELS.get(c.change_type, c.change_type) }}: {{ c.description }}</td></tr>
+  {% else %}<tr><td colspan="4" class="muted">Изменений нет</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+<h2>Все находки ({{ r.findings|length }})</h2>
+{{ ftable(r.findings) }}
+
+{% else %}
+<div class="cards">
+  <div class="card risk risk-{{ r.risk.level }}"><div class="l">Оценка риска</div><div class="v">{{ r.risk.label }}</div><div class="muted">индекс {{ r.risk.index }} из 100</div></div>
+  {% for sv in SEVERITY_ORDER_LIST %}<div class="card bl-{{ sv }}"><div class="l">{{ SEVERITY_LABELS[sv] }}</div><div class="v">{{ r.counts.get(sv, 0) }}</div></div>{% endfor %}
+</div>
+
+{% if r.kind == 'ip' %}
+{% if r.host %}<p class="muted">Последний скан #{{ r.host.scan_id }} · имена: {{ r.host.hostnames|join(', ') or '—' }} · ОС: {{ r.host.os_name or 'не определена' }}</p>{% endif %}
+<h2>Порты и сервисы</h2>
+<table>
+  <thead><tr><th>Порт</th><th>Сервис</th><th>Продукт / версия</th><th>Вывод скриптов nmap</th></tr></thead>
+  <tbody>
+  {% for p in r.ports %}<tr><td class="mono">{{ p.port }}/{{ p.protocol }}</td><td>{{ p.service }}</td><td>{{ p.service_label or '—' }}{% if p.extrainfo %}<div class="muted">{{ p.extrainfo }}</div>{% endif %}</td>
+    <td>{% for s in p.scripts %}<div class="mono"><b>{{ s.id }}</b></div><pre>{{ s.output[:3000] }}</pre>{% endfor %}</td></tr>
+  {% else %}<tr><td colspan="4" class="muted">Открытых портов нет</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% else %}
+{% set d = r.result %}
+{% if d %}
+<h2>DNS-записи</h2>
+<table><tbody>
+  {% for rt in ['A', 'AAAA', 'CNAME', 'MX', 'NS', 'TXT'] %}<tr><th style="width:80px">{{ rt }}</th><td class="mono">{{ (d.records.get(rt) or ['—'])|join('<br>'|safe) }}</td></tr>{% endfor %}
+</tbody></table>
+<h2>Почта: SPF, DKIM, DMARC</h2>
+<table><tbody>
+  <tr><th style="width:80px">SPF</th><td class="mono">{{ d.email_security.get('spf', {}).get('record') or 'не найден' }}</td></tr>
+  <tr><th>DMARC</th><td class="mono">{{ d.email_security.get('dmarc', {}).get('record') or 'не найден' }}</td></tr>
+  <tr><th>DKIM</th><td class="mono">{{ (d.email_security.get('dkim', {}).get('selectors') or {}).keys()|join(', ') or 'селекторы не найдены' }}</td></tr>
+</tbody></table>
+<h2>WHOIS</h2>
+<p>Регистратор: {{ d.whois.get('registrar') or '—' }} · Срок регистрации до: {{ d.whois.get('expires') or '—' }}{% if d.whois.get('days_left') is not none %} (осталось {{ d.whois.get('days_left') }} дн.){% endif %}</p>
+<h2>Поддомены ({{ d.subdomains|length }})</h2>
+<table><thead><tr><th>Имя</th><th>Адреса</th><th>Источник</th></tr></thead><tbody>
+  {% for s in d.subdomains %}<tr><td class="mono">{{ s.name }}</td><td class="mono">{{ (s.ips or [])|join(', ') }}</td><td>{{ (s.sources or [])|join(', ') }}</td></tr>
+  {% else %}<tr><td colspan="3" class="muted">Не обнаружено</td></tr>{% endfor %}
+</tbody></table>
+{% endif %}
+{% endif %}
+
+<h2>Уязвимости и находки</h2>
+{{ ftable(r.findings) }}
+
+<h2>История изменений</h2>
+<table>
+  <thead><tr><th>Дата</th><th>Уровень</th><th>Изменение</th></tr></thead>
+  <tbody>
+  {% for c in r.changes %}<tr><td>{{ c.created_at|dt }}</td><td>{{ sev(c.severity) }}</td><td>{{ CHANGE_LABELS.get(c.change_type, c.change_type) }}: {{ c.description }}</td></tr>
+  {% else %}<tr><td colspan="3" class="muted">Изменений нет</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% endif %}
+</body>
+</html>
