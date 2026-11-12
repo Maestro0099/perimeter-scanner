@@ -46,10 +46,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             for err in res.errors:
                 log.warning("targets.yaml: %s", err)
 
+    from app.scanner.engine import scan_manager
+
+    scan_manager.start()
     try:
         yield
     finally:
-        pass
+        scan_manager.shutdown()
 
 
 def create_app() -> FastAPI:
@@ -64,9 +67,9 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
     app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
-    from app.routers import audit_log, auth, dashboard, targets, users
+    from app.routers import audit_log, auth, dashboard, scans, targets, users
 
-    for module in (auth, dashboard, targets, users, audit_log):
+    for module in (auth, dashboard, targets, scans, users, audit_log):
         app.include_router(module.router)
 
     @app.exception_handler(LoginRequired)

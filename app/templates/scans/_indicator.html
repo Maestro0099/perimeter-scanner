@@ -1,0 +1,8 @@
+{% if active %}
+{% set running = active|selectattr('status', 'equalto', 'running')|list %}
+<a href="/scans/{{ (running[0] if running else active[0]).id }}" class="hidden items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700 ring-1 ring-inset ring-indigo-200 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-300 dark:ring-indigo-500/30 sm:inline-flex" title="Идёт сканирование">
+  <span class="relative flex h-2 w-2"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75"></span><span class="relative inline-flex h-2 w-2 rounded-full bg-indigo-500"></span></span>
+  {% if running %}Скан #{{ running[0].id }}: {{ running[0].progress|round|int }}%{% else %}В очереди: {{ active|length }}{% endif %}
+  {% if active|length > 1 %}<span class="muted">+{{ active|length - 1 }}</span>{% endif %}
+</a>
+{% endif %}

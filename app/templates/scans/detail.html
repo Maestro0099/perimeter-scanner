@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon, csrf_input %}
+{% from "partials/tables.html" import findings_table, ports_table, severity_summary, changes_list %}
+{% from "partials/checks.html" import domain_block, web_table, tls_table %}
+{% block title %}Скан #{{ scan.id }}{% endblock %}
+{% block breadcrumbs %}<a href="/scans" class="text-xs muted">← Сканирования</a>{% endblock %}
+{% block content %}
+<div class="grid gap-6 lg:grid-cols-3">
+  <div class="card lg:col-span-2">
+    <div class="card-header">
+      <h2>Ход выполнения</h2>
+      {% if user.is_admin %}
+      <div class="flex gap-2">
+        {% if scan.is_active %}
+        <form method="post" action="/scans/{{ scan.id }}/cancel" data-confirm-submit="Отменить сканирование?">{{ csrf_input(request) }}<button class="btn-secondary btn-sm">Отменить</button></form>
+        {% else %}
+        <a href="/scans/new?{{ 'group=' ~ scan.group_id if scan.group_id else '' }}" class="btn-secondary btn-sm">{{ icon('play', 'h-4 w-4') }} Повторить</a>
+        <form method="post" action="/scans/{{ scan.id }}/delete" data-confirm-submit="Удалить скан #{{ scan.id }} и его результаты?">{{ csrf_input(request) }}<button class="btn-ghost btn-sm text-red-600">{{ icon('trash', 'h-4 w-4') }}</button></form>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    <div class="card-body">{% include "scans/_progress.html" %}</div>
+  </div>
+  <div class="card card-body text-sm">
+    <dl class="grid grid-cols-3 gap-y-1.5">
+      <dt class="muted">Профиль</dt><dd class="col-span-2">{{ profile.title if profile else scan.profile }} · -T{{ scan.timing }}</dd>
+      <dt class="muted">Запустил</dt><dd class="col-span-2">{{ scan.started_by }}{% if scan.trigger == 'schedule' %} (расписание){% endif %}</dd>
+      <dt class="muted">Создан</dt><dd class="col-span-2">{{ scan.created_at|dt }}</dd>
+      <dt class="muted">Начат</dt><dd class="col-span-2">{{ scan.started_at|dt }}</dd>
+      <dt class="muted">Окончен</dt><dd class="col-span-2">{{ scan.finished_at|dt }}</dd>
+      <dt class="muted">Длительность</dt><dd class="col-span-2">{{ scan.duration_seconds|duration }}</dd>
+      <dt class="muted">Цели</dt><dd class="col-span-2 font-mono text-xs">{% for t in scan.targets %}{{ t.value }}{{ ', ' if not loop.last }}{% endfor %}</dd>
+    </dl>
+  </div>
+</div>
+
+{% if not scan.is_active %}
+<div class="mt-6">{{ severity_summary(counts) }}</div>
+
+<div class="mt-6 card">
+  <div class="tabs px-4" role="tablist">
+    <a href="#findings" class="tab active">Находки ({{ findings|length }})</a>
+    <a href="#hosts" class="tab">Хосты ({{ hosts|length }})</a>
+    {% if domains %}<a href="#domains" class="tab">Домены ({{ domains|length }})</a>{% endif %}
+    {% if web %}<a href="#web" class="tab">Веб ({{ web|length }})</a>{% endif %}
+    {% if tls %}<a href="#tls" class="tab">TLS ({{ tls|length }})</a>{% endif %}
+    <a href="#changes" class="tab">Изменения ({{ changes|length }})</a>
+  </div>
+  <section id="findings">{{ findings_table(findings) }}</section>
+</div>
+
+<section id="hosts" class="mt-6 space-y-4">
+  <h2>Хосты и порты</h2>
+  {% for h in hosts %}
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <a href="/assets/ip/{{ h.ip }}" class="font-mono font-semibold">{{ h.ip }}</a>
+        {% if h.hostnames %}<span class="text-xs muted">{{ h.hostnames|join(', ') }}</span>{% endif %}
+      </div>
+      <div class="text-xs muted">{% if h.os_name %}ОС: {{ h.os_name }} ({{ h.os_accuracy }}%) · {% endif %}{{ h.ports|length }} {{ plural(h.ports|length, 'открытый порт', 'открытых порта', 'открытых портов') }}</div>
+    </div>
+    {{ ports_table(h.ports) }}
+    {% if h.host_scripts %}
+    <div class="border-t border-slate-200 px-4 py-3 text-xs dark:border-slate-800">
+      <div class="label">Скрипты уровня хоста</div>
+      {% for s in h.host_scripts %}<details><summary class="cursor-pointer font-mono text-indigo-600 dark:text-indigo-400">{{ s.id }}</summary><pre class="pre my-1">{{ s.output }}</pre></details>{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="card card-body text-sm muted">Доступных хостов не обнаружено.</div>
+  {% endfor %}
+</section>
+
+{% if domains %}<section id="domains" class="mt-6 space-y-4"><h2>Домены</h2>{% for d in domains %}{{ domain_block(d) }}{% endfor %}</section>{% endif %}
+{% if web %}<section id="web" class="mt-6"><h2 class="mb-3">Веб-сервисы</h2><div class="card">{{ web_table(web) }}</div></section>{% endif %}
+{% if tls %}<section id="tls" class="mt-6"><h2 class="mb-3">TLS</h2><div class="card">{{ tls_table(tls) }}</div></section>{% endif %}
+
+<section id="changes" class="mt-6">
+  <h2 class="mb-3">Изменения относительно предыдущего скана</h2>
+  <div class="card">{{ changes_list(changes) }}</div>
+</section>
+
+{% if user.is_admin %}
+<details class="mt-6 card card-body text-xs">
+  <summary class="cursor-pointer font-medium">Команда nmap</summary>
+  <pre class="pre mt-2">{{ scan.nmap_command or '—' }}</pre>
+  {% if has_xml %}<a href="/scans/{{ scan.id }}/nmap.xml" class="btn-secondary btn-sm mt-2">{{ icon('download', 'h-4 w-4') }} XML-вывод nmap</a>{% endif %}
+</details>
+{% endif %}
+{% endif %}
+{% endblock %}
