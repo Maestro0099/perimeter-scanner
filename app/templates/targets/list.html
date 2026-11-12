@@ -47,7 +47,7 @@
               </td>
               <td><span class="badge-neutral">{{ KIND_LABELS[t.kind] }}</span></td>
               <td>{{ t.group.name if t.group else '—' }}</td>
-              <td>{% for tg in t.tag_names %}<span class="badge-indigo mr-1">#{{ tg }}</span>{% endfor %}</td>
+              <td>{% for tg in t.tag_names %}<span class="badge-accent mr-1">#{{ tg }}</span>{% endfor %}</td>
               <td data-value="{{ 1 if t.approved else 0 }}">{% if t.approved %}<span class="badge-green">Утверждена</span>{% else %}<span class="sev-medium">Не утверждена</span>{% endif %}</td>
               <td class="whitespace-nowrap text-xs muted" data-value="{{ t.created_at.isoformat() }}">{{ t.created_at|dt }}</td>
               {% if user.is_admin %}

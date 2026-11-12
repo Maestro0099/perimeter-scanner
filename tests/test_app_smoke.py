@@ -139,3 +139,37 @@ def test_pages_render_with_check_results(client: TestClient) -> None:
     assert r.status_code == 303
     r = client.post("/assets/domain/example.com/promote", data={"name": "evil.org", "csrf_token": token})
     assert r.status_code == 400
+
+
+def test_add_new_addresses_and_scan(client: TestClient, monkeypatch) -> None:
+    """Новые адреса вводятся прямо при запуске: попадают в утверждённый список и в скан."""
+    from app.scanner import engine
+
+    monkeypatch.setattr(engine.scan_manager, "submit", lambda sid: None)
+    _login(client)
+    token = _csrf(client, "/scans/new")
+    r = client.post("/scans", data={"new_targets": "198.51.100.40\nnew.example.org", "profile": "quick", "csrf_token": token},
+                    follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].startswith("/scans/")
+    page = client.get("/targets").text
+    assert "198.51.100.40" in page and "new.example.org" in page
+    # некорректный ввод ничего не добавляет и не запускает
+    r = client.post("/scans", data={"new_targets": "198.51.100.41\n--script=exploit", "profile": "quick", "csrf_token": token})
+    assert "198.51.100.41" not in client.get("/targets").text
+
+
+def test_password_change_drops_other_sessions(client: TestClient) -> None:
+    from app import db as dbmod
+    from app.models import UserSession
+
+    _login(client)
+    client.cookies.clear()
+    _login(client)
+    with dbmod.session_scope() as db:
+        assert db.query(UserSession).count() == 2
+    token = _csrf(client, "/account")
+    r = client.post("/account/password", data={"current_password": "Test-Password-123", "new_password": "New-Password-4567",
+                                               "confirm_password": "New-Password-4567", "csrf_token": token})
+    assert "Пароль изменён" in r.text
+    with dbmod.session_scope() as db:
+        assert db.query(UserSession).count() == 1

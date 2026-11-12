@@ -47,7 +47,7 @@ class Notification:
         return "\n".join(out)
 
     def as_html(self) -> str:
-        colors = {"critical": "#b91c1c", "high": "#ea580c", "medium": "#eab308", "low": "#2563eb", "info": "#64748b"}
+        colors = {"critical": "#e11d48", "high": "#f97316", "medium": "#ca8a04", "low": "#0284c7", "info": "#64748b"}
         rows = "".join(
             f'<tr><td style="padding:4px 8px;color:{colors.get(sev)};font-weight:bold;white-space:nowrap">'
             f"{html.escape(SEVERITY_LABELS.get(sev, sev))}</td><td style=\"padding:4px 8px\">{html.escape(text)}</td></tr>"

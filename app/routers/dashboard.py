@@ -7,6 +7,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.analysis.knowledge import service_risk
 from app.analysis.severity import SEVERITY_LABELS, SEVERITY_ORDER_LIST
 from app.analysis.state import asset_index, count_by_severity, current_findings, latest_hosts, risk_score, trend
 from app.auth import current_user
@@ -17,7 +18,7 @@ from app.templating import fmt_dt, render
 
 router = APIRouter()
 
-SEV_COLORS = {"critical": "#b91c1c", "high": "#ea580c", "medium": "#eab308", "low": "#2563eb", "info": "#94a3b8"}
+SEV_COLORS = {"critical": "#e11d48", "high": "#f97316", "medium": "#eab308", "low": "#38bdf8", "info": "#64748b"}
 
 
 def chart_configs(counts: dict[str, int], trend_rows: list[dict]) -> dict:
@@ -34,7 +35,7 @@ def chart_configs(counts: dict[str, int], trend_rows: list[dict]) -> dict:
                 }
             ],
         },
-        "options": {"cutout": "68%", "plugins": {"legend": {"position": "bottom", "labels": {"boxWidth": 10, "usePointStyle": True}}}},
+        "options": {"cutout": "72%", "plugins": {"legend": {"position": "bottom", "labels": {"boxWidth": 10, "usePointStyle": True}}}},
     }
     labels = [f"#{t['scan_id']} {fmt_dt(t['date'], '%d.%m')}" for t in trend_rows]
     line = {
@@ -69,6 +70,17 @@ def dashboard(request: Request, user: User = Depends(current_user), db: Session 
     assets = asset_index(db, findings)
     last_scan = db.scalar(select(Scan).where(Scan.status == ScanStatus.DONE.value).order_by(Scan.id.desc()).limit(1))
     changes = list(db.scalars(select(Change).order_by(Change.id.desc()).limit(15)))
+    port_stats: dict[tuple[int, str, str], int] = {}
+    for h in hosts.values():
+        for p in h.ports:
+            key = (p.port, p.protocol, p.service or "?")
+            port_stats[key] = port_stats.get(key, 0) + 1
+    exposure = [
+        {"port": k[0], "protocol": k[1], "service": k[2], "hosts": n, "risk": service_risk(k[1], k[0], k[2])}
+        for k, n in sorted(port_stats.items(), key=lambda x: (-x[1], x[0][0]))[:14]
+    ]
+    total = sum(counts.values()) or 1
+    risk = risk_score(findings)
     week_changes = db.scalar(
         select(func.count()).select_from(Change).where(Change.severity.in_(["critical", "high", "medium"]))
     )
@@ -77,7 +89,13 @@ def dashboard(request: Request, user: User = Depends(current_user), db: Session 
         "dashboard.html",
         {
             "counts": counts,
-            "risk": risk_score(findings),
+            "risk": risk,
+            "risk_color": SEV_COLORS[risk.level],
+            "gauge_dash": round(risk.index / 100 * 251.3, 1),
+            "exposure": exposure,
+            "shares": {sev: round(100 * counts.get(sev, 0) / total, 2) for sev in SEVERITY_ORDER_LIST},
+            "findings_total": sum(counts.values()),
+            "domains_total": sum(1 for a in assets if a["type"] == "domain"),
             "targets_total": db.scalar(select(func.count()).select_from(Target)) or 0,
             "hosts_total": len(hosts),
             "ports_total": sum(len(h.ports) for h in hosts.values()),

@@ -31,7 +31,7 @@
       <h2>Параметры сканирования</h2>
       <div class="grid gap-4 sm:grid-cols-2">
         <div><label class="label" for="t">Скорость по умолчанию (-T)</label>
-          <select id="t" name="nmap_timing" class="input">{% for t in range(6) %}<option value="{{ t }}" {{ 'selected' if rs.nmap_timing == t }}>T{{ t }}{{ ' — рекомендуется' if t == 3 }}</option>{% endfor %}</select>
+          <select id="t" name="nmap_timing" class="input">{% for t in range(6) %}<option value="{{ t }}" {{ 'selected' if rs.nmap_timing == t }}>T{{ t }}{{ ' — рекомендуется' if t == 4 }}</option>{% endfor %}</select>
           <p class="mt-1 text-xs muted">Используется для сканов по расписанию и как значение по умолчанию при ручном запуске.</p></div>
         <div><label class="label" for="mp">Лимит параллельных сканов</label>
           <input id="mp" type="number" name="max_parallel_scans" min="1" max="16" value="{{ rs.max_parallel_scans }}" class="input">
@@ -54,6 +54,8 @@
       <dl class="card-body grid grid-cols-2 gap-y-1.5 text-sm">
         <dt class="muted">nmap</dt><dd>{% if nmap_ok %}<span class="badge-green">найден</span>{% else %}<span class="sev-critical">не найден</span>{% endif %}</dd>
         <dt class="muted">Режим nmap</dt><dd>{{ 'привилегированный (SYN, UDP, -O)' if env.nmap_privileged else 'TCP connect' }}</dd>
+        <dt class="muted">Две фазы</dt><dd>{{ 'включены' if env.nmap_two_phase else 'выключены' }}</dd>
+        <dt class="muted">Скорость</dt><dd>min-rate {{ env.nmap_min_rate or '—' }} · retries {{ env.nmap_max_retries }} · hostgroup {{ env.nmap_min_hostgroup }}</dd>
         <dt class="muted">Область (scope)</dt><dd class="break-all text-xs">{{ env.allowed_scope or 'не ограничена' }}</dd>
         <dt class="muted">Таймаут скана</dt><dd>{{ env.scan_timeout_minutes }} мин</dd>
         <dt class="muted">crt.sh</dt><dd>{{ 'включён' if env.crtsh_enabled else 'выключен' }}</dd>

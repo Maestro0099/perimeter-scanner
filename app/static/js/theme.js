@@ -1,9 +1,7 @@
 // Загружается в <head> синхронно, чтобы избежать мигания темы.
+// По умолчанию — тёмная тема; светлая включается переключателем и запоминается.
 (function () {
   try {
-    var t = localStorage.getItem("ps-theme");
-    if (t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
-      document.documentElement.classList.add("dark");
-    }
-  } catch (e) { /* localStorage недоступен */ }
+    if (localStorage.getItem("ps-theme") !== "light") document.documentElement.classList.add("dark");
+  } catch (e) { document.documentElement.classList.add("dark"); }
 })();

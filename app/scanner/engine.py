@@ -19,8 +19,8 @@ from app.audit import audit
 from app.config import get_settings
 from app.db import new_session, session_scope
 from app.models import Finding, Host, Port, Scan, ScanStatus, Target, TargetKind, utcnow
-from app.scanner.nmap_parser import HostResult, NmapParseError, parse_nmap_xml
-from app.scanner.nmap_profiles import PROFILES, NmapOptions, build_nmap_args
+from app.scanner.nmap_parser import HostResult, NmapParseError, NmapRun, parse_nmap_xml
+from app.scanner.nmap_profiles import PROFILES, NmapOptions, build_discovery_args, build_nmap_args, uses_two_phase
 from app.scanner.nmap_runner import NmapCancelled, NmapError, NmapTimeout, run_nmap
 from app.validation import ValidationError, parse_scope, validate_in_scope, validate_timing
 
@@ -229,6 +229,8 @@ class ScanJob:
         self.cancel = cancel
         self.settings = get_settings()
         self._last_progress_write = 0.0
+        self._commands: list[str] = []
+        self._started = time.monotonic()
         self.workdir = self.settings.scans_dir / str(scan_id)
 
     # ---- прогресс
@@ -328,32 +330,38 @@ class ScanJob:
         return result
 
     # ---- nmap
-    def run_nmap(self, targets: list[tuple[int, str, str]], profile: str, timing: int, p0: float, p1: float) -> list[HostResult]:
-        targets_file = self.workdir / "targets.txt"
-        xml_out = self.workdir / "nmap.xml"
-        targets_file.write_text("\n".join(v for _, _, v in targets) + "\n", encoding="utf-8")
-        args = build_nmap_args(
-            NmapOptions(
-                profile=profile,
-                timing=timing,
-                privileged=self.settings.nmap_privileged,
-                targets_file=targets_file,
-                xml_out=xml_out,
-                host_timeout_min=self.settings.host_timeout_minutes,
-                script_timeout_min=self.settings.script_timeout_minutes,
-            )
+    def _options(self, profile: str, timing: int, targets_file: Path, xml_out: Path, tcp_ports: str | None = None) -> NmapOptions:
+        st = self.settings
+        return NmapOptions(
+            profile=profile,
+            timing=timing,
+            privileged=st.nmap_privileged,
+            targets_file=targets_file,
+            xml_out=xml_out,
+            host_timeout_min=st.host_timeout_minutes,
+            script_timeout_min=st.script_timeout_minutes,
+            skip_host_discovery=st.nmap_skip_host_discovery,
+            min_rate=st.nmap_min_rate,
+            max_retries=st.nmap_max_retries,
+            min_hostgroup=st.nmap_min_hostgroup,
+            tcp_ports=tcp_ports,
         )
+
+    def _exec(self, args: list[str], xml_out: Path, label: str, p0: float, p1: float) -> NmapRun:
+        self._commands.append(shlex.join([self.settings.nmap_path, *args]))
         with session_scope() as db:
             db.execute(
-                update(Scan)
-                .where(Scan.id == self.scan_id)
-                .values(nmap_command=shlex.join([self.settings.nmap_path, *args]), stage="Запуск nmap")
+                update(Scan).where(Scan.id == self.scan_id).values(nmap_command="\n".join(self._commands), stage=label)
             )
+        remaining = self.settings.scan_timeout_minutes * 60 - (time.monotonic() - self._started)
+        if remaining <= 0:
+            raise NmapTimeout(f"Превышено время сканирования ({self.settings.scan_timeout_minutes} мин)")
+        scale = self.scaled(p0, p1)
         result = run_nmap(
             self.settings.nmap_path,
             args,
-            timeout_s=self.settings.scan_timeout_minutes * 60,
-            on_progress=self.scaled(p0, p1),
+            timeout_s=remaining,
+            on_progress=lambda stage, pct: scale(f"{label}: {stage}", pct),
             cancel_event=self.cancel,
         )
         if not xml_out.exists():
@@ -363,14 +371,54 @@ class ScanJob:
             raise NmapError(f"nmap завершился с кодом {result.returncode}: {result.stderr.strip()[:1000]}")
         if run.error:
             log.warning("nmap: %s", run.error)
+        return run
+
+    def run_nmap(self, targets: list[tuple[int, str, str]], profile: str, timing: int, p0: float, p1: float) -> list[HostResult]:
+        """Быстрый профиль — один запуск. Полный/агрессивный — две фазы:
+        1) быстрый поиск открытых TCP-портов по всем 65535 портам;
+        2) глубокий анализ (версии, ОС, скрипты, UDP) только по найденным хостам и портам."""
+        targets_file = self.workdir / "targets.txt"
+        xml_out = self.workdir / "nmap.xml"
+        targets_file.write_text("\n".join(v for _, _, v in targets) + "\n", encoding="utf-8")
+
+        if not (self.settings.nmap_two_phase and uses_two_phase(profile)):
+            run = self._exec(build_nmap_args(self._options(profile, timing, targets_file, xml_out)), xml_out, "nmap", p0, p1)
+            return [h for h in run.hosts if h.status == "up"]
+
+        mid = p0 + (p1 - p0) * 0.45
+        disc_xml = self.workdir / "discovery.xml"
+        disc = self._exec(
+            build_discovery_args(self._options(profile, timing, targets_file, disc_xml)), disc_xml, "Фаза 1 — поиск портов", p0, mid
+        )
+        self.check_cancel()
+        deep_targets, tcp_ports = plan_deep_scan(targets, disc.hosts, udp_all_hosts=self.settings.nmap_udp_all_hosts)
+        has_udp = self.settings.nmap_privileged and PROFILES[profile].udp_top > 0
+        if not deep_targets or (not tcp_ports and not has_udp):
+            log.info("Скан #%s: открытых TCP-портов не найдено, глубокая фаза пропущена", self.scan_id)
+            return []
+        deep_file = self.workdir / "targets-deep.txt"
+        deep_file.write_text("\n".join(deep_targets) + "\n", encoding="utf-8")
+        run = self._exec(
+            build_nmap_args(self._options(profile, timing, deep_file, xml_out, tcp_ports=tcp_ports)),
+            xml_out,
+            "Фаза 2 — сервисы, ОС, скрипты",
+            mid,
+            p1,
+        )
         return [h for h in run.hosts if h.status == "up"]
 
     def store_nmap(self, hosts: list[HostResult], targets: list[tuple[int, str, str]]) -> None:
         with session_scope() as db:
             seen: set[str] = set()
             findings: list[FindingData] = []
+            explicit = {v for _, kind, v in targets if kind == TargetKind.IP.value}
+            domains = {v for _, kind, v in targets if kind == TargetKind.DOMAIN.value}
             for h in hosts:
                 if h.ip in seen:
+                    continue
+                # При -Pn nmap считает «живым» каждый адрес подсети. Хосты без открытых портов
+                # сохраняем, только если адрес или домен указан в целях явно.
+                if not h.open_ports and h.ip not in explicit and not (domains & set(h.user_hostnames)):
                     continue
                 seen.add(h.ip)
                 os_match = h.best_os
@@ -383,6 +431,7 @@ class ScanJob:
                     os_name=os_match.name if os_match else "",
                     os_accuracy=os_match.accuracy if os_match else 0,
                     host_scripts=[s.to_dict() for s in h.host_scripts],
+                    extra=h.extra,
                 )
                 for p in h.ports:
                     if p.state != "open":
@@ -392,6 +441,7 @@ class ScanJob:
                             protocol=p.protocol,
                             port=p.port,
                             state=p.state,
+                            reason=p.reason[:32],
                             service=p.service.name,
                             product=p.service.product[:255],
                             version=p.service.version[:128],
@@ -404,6 +454,31 @@ class ScanJob:
                 db.add(host)
                 findings.extend(findings_from_host(h))
             save_findings(db, self.scan_id, findings, targets_by_asset(targets, hosts))
+
+
+def plan_deep_scan(
+    targets: list[tuple[int, str, str]], discovered: list[HostResult], *, udp_all_hosts: bool = False
+) -> tuple[list[str], str]:
+    """По результатам фазы 1 определяет, что сканировать глубоко.
+
+    Возвращает (список целей, список TCP-портов через запятую). Явно указанные IP и домены
+    включаются всегда; из подсетей — только адреса, на которых найдены открытые порты
+    (либо подсеть целиком, если включён режим udp_all_hosts).
+    """
+    alive = {h.ip: h for h in discovered if h.open_ports}
+    ports = sorted({p.port for h in alive.values() for p in h.open_ports if p.protocol == "tcp"})
+    result: list[str] = []
+    for _, kind, value in targets:
+        if kind in (TargetKind.IP.value, TargetKind.DOMAIN.value) or udp_all_hosts:
+            if value not in result:
+                result.append(value)
+    if not udp_all_hosts:
+        nets = [ipaddress.ip_network(v, strict=False) for _, k, v in targets if k == TargetKind.CIDR.value]
+        for ip in sorted(alive, key=lambda x: ipaddress.ip_address(x)):
+            addr = ipaddress.ip_address(ip)
+            if ip not in result and any(addr.version == n.version and addr in n for n in nets):
+                result.append(ip)
+    return result, ",".join(str(p) for p in ports)
 
 
 def save_findings(db: Session, scan_id: int, findings: list[FindingData], target_map: dict[str, int | None]) -> None:

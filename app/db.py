@@ -54,7 +54,24 @@ def get_engine() -> Engine:
 def create_all() -> None:
     from app import models  # noqa: F401  регистрация моделей
 
-    Base.metadata.create_all(get_engine())
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+    _ensure_columns(engine)
+
+
+def _ensure_columns(engine: Engine) -> None:
+    """Простая миграция: добавляет в существующие таблицы столбцы, появившиеся в новых версиях."""
+    from sqlalchemy import inspect, text
+
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            existing = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name in existing:
+                    continue
+                ddl = f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col.type.compile(engine.dialect)}'
+                conn.execute(text(ddl))
 
 
 def new_session() -> Session:

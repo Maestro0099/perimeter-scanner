@@ -12,26 +12,28 @@
 </head>
 <body class="flex min-h-screen items-center justify-center px-4">
   <div class="w-full max-w-sm">
-    <div class="mb-6 flex flex-col items-center text-center">
-      <span class="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-600/20">{{ icon('shield', 'h-7 w-7') }}</span>
-      <h1 class="mt-4">{{ app_name }}</h1>
-      <p class="mt-1 text-sm muted">Контроль внешнего периметра</p>
+    <div class="mb-8 flex flex-col items-center text-center">
+      <span class="radar h-20 w-20" aria-hidden="true"></span>
+      <h1 class="mt-5 font-mono text-base uppercase tracking-[0.2em]">{{ app_name }}</h1>
+      <p class="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-accent-700 dark:text-accent-400">external attack surface monitor</p>
     </div>
-    <form method="post" action="/login" class="card card-body space-y-4">
+    <form method="post" action="/login" class="card hud card-body space-y-4">
       <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
       <input type="hidden" name="next" value="{{ next }}">
+      <div class="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider muted">{{ icon('lock', 'h-3.5 w-3.5') }} авторизованный доступ</div>
       {% if error %}<div class="alert-error" role="alert">{{ error }}</div>{% endif %}
       <div>
         <label class="label" for="username">Логин</label>
-        <input class="input" id="username" name="username" value="{{ username or '' }}" autocomplete="username" required autofocus maxlength="64">
+        <input class="input font-mono" id="username" name="username" value="{{ username or '' }}" autocomplete="username" required autofocus maxlength="64">
       </div>
       <div>
         <label class="label" for="password">Пароль</label>
-        <input class="input" id="password" type="password" name="password" autocomplete="current-password" required maxlength="256">
+        <input class="input font-mono" id="password" type="password" name="password" autocomplete="current-password" required maxlength="256">
       </div>
-      <button class="btn-primary w-full">{{ icon('lock', 'h-4 w-4') }} Войти</button>
+      <button class="btn-primary w-full py-2.5">Войти</button>
     </form>
-    <div class="mt-4 flex justify-center">
+    <p class="mt-4 text-center font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-600">действия пользователей записываются в журнал аудита</p>
+    <div class="mt-3 flex justify-center">
       <button type="button" data-theme-toggle class="btn-ghost btn-sm">
         <span class="dark:hidden">{{ icon('moon', 'h-4 w-4') }} Тёмная тема</span><span class="hidden dark:inline-flex dark:items-center dark:gap-1.5">{{ icon('sun', 'h-4 w-4') }} Светлая тема</span>
       </button>

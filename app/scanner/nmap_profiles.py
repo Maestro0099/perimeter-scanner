@@ -63,7 +63,7 @@ PROFILES: dict[str, Profile] = {
         title="Полный",
         description=(
             "Все порты TCP (-p-), топ-100 UDP, -sV, -O, скрипты default, safe, discovery, version, vuln "
-            "и vulners (сопоставление с CVE и CVSS)."
+            "и vulners (сопоставление с CVE и CVSS), перечисление шифров TLS."
         ),
         categories=("default", "safe", "discovery", "version", "vuln"),
         exclude=(*EXCLUDED_ALWAYS, "intrusive"),
@@ -71,7 +71,9 @@ PROFILES: dict[str, Profile] = {
         udp_top=100,
         tcp_top=0,
         os_detect=True,
-        extra_scripts=("vulners",),
+        # ssl-enum-ciphers входит в discovery, но помечен intrusive (много TLS-рукопожатий);
+        # включаем явно — это основной источник данных о шифрах и протоколах.
+        extra_scripts=("vulners", "ssl-enum-ciphers"),
     ),
     "aggressive": Profile(
         key="aggressive",
@@ -90,7 +92,7 @@ PROFILES: dict[str, Profile] = {
             "нестабильных сервисов. Запускайте только по согласованию с владельцами систем и в "
             "согласованное окно."
         ),
-        extra_scripts=("vulners",),
+        extra_scripts=("vulners", "ssl-enum-ciphers"),
     ),
 }
 
@@ -151,46 +153,29 @@ class NmapOptions:
     host_timeout_min: int = 60
     script_timeout_min: int = 5
     skip_host_discovery: bool = True
+    # производительность
+    min_rate: int = 0
+    max_retries: int = 2
+    min_hostgroup: int = 64
+    # список TCP-портов для глубокой фазы (результат фазы обнаружения); None — по профилю
+    tcp_ports: str | None = None
 
 
-def build_nmap_args(opts: NmapOptions) -> list[str]:
-    """Возвращает список аргументов nmap (без имени исполняемого файла)."""
-    profile = PROFILES.get(opts.profile)
-    if profile is None:
-        raise ValidationError(f"Неизвестный профиль: {opts.profile!r}")
-    timing = validate_timing(opts.timing)
+def _perf_args(opts: NmapOptions, syn: bool) -> list[str]:
+    args = [f"-T{validate_timing(opts.timing)}", "--max-retries", str(int(opts.max_retries))]
+    if opts.min_rate > 0:
+        args += ["--min-rate", str(int(opts.min_rate))]
+    if opts.min_hostgroup > 1:
+        args += ["--min-hostgroup", str(int(opts.min_hostgroup))]
+    if syn:
+        # не ждать при ограничении RST на стороне цели: закрытые порты нам не важны
+        args.append("--defeat-rst-ratelimit")
+    return args
 
-    args: list[str] = []
-    if opts.privileged:
-        args += ["--privileged", "-sS"]
-        if profile.udp_top:
-            args.append("-sU")
-    else:
-        args += ["--unprivileged", "-sT"]
 
-    if profile.all_tcp:
-        ports = "T:1-65535"
-        if opts.privileged and profile.udp_top:
-            ports += ",U:" + top_ports("udp", profile.udp_top)
-        args += ["-p", ports]
-    else:
-        args += ["--top-ports", str(profile.tcp_top)]
-
-    args += ["-sV", "--version-intensity", "7"]
-    if profile.os_detect and opts.privileged:
-        args += ["-O", "--osscan-limit"]
-
-    expr = profile.script_expression()
-    if expr:
-        args += ["--script", expr, "--script-timeout", f"{int(opts.script_timeout_min)}m"]
-
-    if opts.skip_host_discovery:
-        args.append("-Pn")
-    args += [
-        f"-T{timing}",
+def _output_args(opts: NmapOptions) -> list[str]:
+    return [
         "--resolve-all",
-        "--max-retries",
-        "3",
         "--host-timeout",
         f"{int(opts.host_timeout_min)}m",
         "--stats-every",
@@ -201,6 +186,85 @@ def build_nmap_args(opts: NmapOptions) -> list[str]:
         "-iL",
         str(opts.targets_file),
     ]
+
+
+def uses_two_phase(profile: str) -> bool:
+    prof = PROFILES.get(profile)
+    return bool(prof and prof.all_tcp)
+
+
+def build_discovery_args(opts: NmapOptions) -> list[str]:
+    """Фаза 1: максимально быстрый поиск открытых TCP-портов (все 65535) без анализа сервисов."""
+    if PROFILES.get(opts.profile) is None:
+        raise ValidationError(f"Неизвестный профиль: {opts.profile!r}")
+    args = ["--privileged", "-sS"] if opts.privileged else ["--unprivileged", "-sT"]
+    args += ["-p", "1-65535", "--open", "-n"]
+    if opts.skip_host_discovery:
+        args.append("-Pn")
+    args += _perf_args(opts, syn=opts.privileged)
+    args += _output_args(opts)
+    return args
+
+
+def _valid_port_list(value: str) -> bool:
+    return bool(value) and all(part.isdigit() and 0 < int(part) < 65536 for part in value.split(","))
+
+
+def build_nmap_args(opts: NmapOptions) -> list[str]:
+    """Основной (или глубокий) запуск: сервисы, версии, ОС, скрипты NSE."""
+    profile = PROFILES.get(opts.profile)
+    if profile is None:
+        raise ValidationError(f"Неизвестный профиль: {opts.profile!r}")
+    if opts.tcp_ports is not None and opts.tcp_ports != "" and not _valid_port_list(opts.tcp_ports):
+        raise ValidationError("Некорректный список портов")
+    udp = bool(opts.privileged and profile.udp_top)
+    deep = profile.all_tcp
+
+    args: list[str] = []
+    if opts.privileged:
+        args += ["--privileged"]
+        if opts.tcp_ports != "":
+            args.append("-sS")
+        if udp:
+            args.append("-sU")
+    else:
+        args += ["--unprivileged", "-sT"]
+
+    if deep:
+        parts: list[str] = []
+        if opts.tcp_ports is None:
+            parts.append("T:1-65535")
+        elif opts.tcp_ports:
+            parts.append("T:" + opts.tcp_ports)
+        if udp:
+            parts.append("U:" + top_ports("udp", profile.udp_top))
+        if not parts:
+            raise ValidationError("Нет портов для сканирования")
+        args += ["-p", ",".join(parts)]
+    else:
+        args += ["--top-ports", str(profile.tcp_top)]
+
+    # Глубокая фаза работает только по найденным портам, поэтому можно позволить
+    # максимальную интенсивность определения версий.
+    args += ["-sV", "--version-all"] if deep else ["-sV", "--version-intensity", "7"]
+    if profile.os_detect and opts.privileged:
+        args += ["-O", "--osscan-guess", "--traceroute"]
+
+    expr = profile.script_expression()
+    if expr:
+        args += [
+            "--script",
+            expr,
+            "--script-timeout",
+            f"{int(opts.script_timeout_min)}m",
+            "--script-args",
+            "vulners.mincvss=0.1",
+        ]
+
+    if opts.skip_host_discovery:
+        args.append("-Pn")
+    args += _perf_args(opts, syn=opts.privileged and opts.tcp_ports != "")
+    args += _output_args(opts)
     _assert_safe(args)
     return args
 

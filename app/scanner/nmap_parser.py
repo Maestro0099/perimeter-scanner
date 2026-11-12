@@ -40,6 +40,7 @@ class Service:
     ostype: str = ""
     method: str = ""
     conf: int = 0
+    devicetype: str = ""
     cpe: list[str] = field(default_factory=list)
 
     @property
@@ -103,6 +104,26 @@ class HostResult:
     ports: list[PortResult] = field(default_factory=list)
     os_matches: list[OsMatch] = field(default_factory=list)
     host_scripts: list[ScriptResult] = field(default_factory=list)
+    uptime_seconds: int = 0
+    last_boot: str = ""
+    distance: int = 0
+    trace: list[dict[str, str]] = field(default_factory=list)
+
+    @property
+    def extra(self) -> dict[str, Any]:
+        """Дополнительные сведения о хосте для хранения и отчётов."""
+        device_types = sorted({p.service.devicetype for p in self.ports if p.service.devicetype})
+        os_types = sorted({p.service.ostype for p in self.ports if p.service.ostype})
+        data: dict[str, Any] = {
+            "os_matches": [{"name": m.name, "accuracy": m.accuracy} for m in sorted(self.os_matches, key=lambda m: -m.accuracy)[:5]],
+            "uptime_seconds": self.uptime_seconds,
+            "last_boot": self.last_boot,
+            "distance": self.distance,
+            "trace": self.trace[:40],
+            "device_types": device_types,
+            "service_os": os_types,
+        }
+        return {k: v for k, v in data.items() if v}
 
     @property
     def open_ports(self) -> list[PortResult]:
@@ -172,6 +193,7 @@ def _parse_port(node: Element) -> PortResult:
             ostype=svc_el.get("ostype", ""),
             method=svc_el.get("method", ""),
             conf=_int(svc_el.get("conf")),
+            devicetype=svc_el.get("devicetype", ""),
             cpe=[c.text or "" for c in svc_el.findall("cpe") if c.text],
         )
     return PortResult(
@@ -205,7 +227,17 @@ def _parse_host(node: Element) -> HostResult | None:
             hostnames.append(name)
         if h.get("type") == "user" and name not in user_hostnames:
             user_hostnames.append(name)
+    uptime_el = node.find("uptime")
+    distance_el = node.find("distance")
+    trace = [
+        {"ttl": hop.get("ttl", ""), "ip": hop.get("ipaddr", ""), "host": hop.get("host", ""), "rtt": hop.get("rtt", "")}
+        for hop in node.findall("trace/hop")
+    ]
     return HostResult(
+        uptime_seconds=_int(uptime_el.get("seconds")) if uptime_el is not None else 0,
+        last_boot=uptime_el.get("lastboot", "") if uptime_el is not None else "",
+        distance=_int(distance_el.get("value")) if distance_el is not None else 0,
+        trace=trace,
         ip=ip,
         addr_type=addr_type,
         status=status_el.get("state", "unknown") if status_el is not None else "unknown",

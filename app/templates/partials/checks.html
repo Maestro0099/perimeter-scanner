@@ -49,7 +49,7 @@
           <span class="muted">Оплачен до</span><span class="col-span-2">{{ w.get('expires') or '—' }}
             {% if w.get('days_left') is not none %}<span class="{{ 'sev-critical' if w.days_left < 30 else ('sev-medium' if w.days_left < 60 else 'badge-green') }} ml-1">{{ w.days_left }} дн.</span>{% endif %}</span>
         </div>
-        {% if full and w.get('raw') %}<details class="text-xs"><summary class="cursor-pointer text-indigo-600 dark:text-indigo-400">Ответ WHOIS</summary><pre class="pre mt-1">{{ w.raw }}</pre></details>{% endif %}
+        {% if full and w.get('raw') %}<details class="text-xs"><summary class="cursor-pointer text-accent-600 dark:text-accent-400">Ответ WHOIS</summary><pre class="pre mt-1">{{ w.raw }}</pre></details>{% endif %}
         {% endif %}
       </div>
     </div>
@@ -100,7 +100,7 @@
         </td>
         <td class="tabular-nums">{{ w.status_code or '—' }}</td>
         <td class="text-xs">{% if w.server %}<div class="font-mono">{{ w.server }}</div>{% endif %}
-          {% for t in w.technologies %}<span class="badge-indigo mb-1 mr-1">{{ t }}</span>{% endfor %}</td>
+          {% for t in w.technologies %}<span class="badge-accent mb-1 mr-1">{{ t }}</span>{% endfor %}</td>
         <td class="text-xs">
           {% for name, info in (w.security_headers or {}).items() %}
           <div class="flex items-center gap-1">{% if info.present %}<span class="text-emerald-600">✓</span>{% else %}<span class="text-amber-600">✗</span>{% endif %}<span class="{{ '' if info.present else 'muted' }}">{{ name }}</span></div>
@@ -128,12 +128,12 @@
           <div class="font-medium">{{ c.subject }}</div>
           <div class="muted">Издатель: {{ c.issuer }}</div>
           <div class="muted">{{ c.key_type }} {{ c.key_size }} · {{ c.signature }}</div>
-          {% if c.san %}<details><summary class="cursor-pointer text-indigo-600 dark:text-indigo-400">SAN ({{ c.san|length }})</summary><div class="mono">{{ c.san|join(', ') }}</div></details>{% endif %}
+          {% if c.san %}<details><summary class="cursor-pointer text-accent-600 dark:text-accent-400">SAN ({{ c.san|length }})</summary><div class="mono">{{ c.san|join(', ') }}</div></details>{% endif %}
           {% endif %}
         </td>
         <td data-value="{{ c.days_left if c.days_left is defined else 9999 }}">{% if c.days_left is defined %}<span class="{{ 'sev-critical' if c.days_left < 14 else ('sev-medium' if c.days_left < 30 else 'badge-green') }}">{{ c.days_left }}</span>{% else %}—{% endif %}</td>
         <td class="text-xs">{{ ok_bad(t.chain_valid, 'Доверена', 'Ошибка', 'Не проверена') }}{% if t.chain_error %}<div class="mt-1 muted">{{ t.chain_error }}</div>{% endif %}
-          {% if c.chain %}<details class="mt-1"><summary class="cursor-pointer text-indigo-600 dark:text-indigo-400">Цепочка ({{ c.chain|length }})</summary>
+          {% if c.chain %}<details class="mt-1"><summary class="cursor-pointer text-accent-600 dark:text-accent-400">Цепочка ({{ c.chain|length }})</summary>
             <ol class="ml-4 list-decimal">{% for x in c.chain %}<li>{{ x.subject }} <span class="muted">← {{ x.issuer }}</span></li>{% endfor %}</ol></details>{% endif %}</td>
         <td class="whitespace-nowrap text-xs">
           {% for p, v in (t.protocols or {}).items() %}

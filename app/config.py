@@ -44,8 +44,15 @@ class Settings(BaseSettings):
     # --- nmap ---
     nmap_path: str = "nmap"
     nmap_privileged: bool = True
-    nmap_timing: int = 3
+    nmap_timing: int = 4
     max_parallel_scans: int = 2
+    # Производительность: двухфазное сканирование (быстрый поиск портов → глубокий анализ найденного)
+    nmap_two_phase: bool = True
+    nmap_min_rate: int = 1000
+    nmap_max_retries: int = 2
+    nmap_min_hostgroup: int = 64
+    nmap_skip_host_discovery: bool = True
+    nmap_udp_all_hosts: bool = False
     scan_timeout_minutes: int = 360
     host_timeout_minutes: int = 60
     script_timeout_minutes: int = 5
@@ -81,6 +88,21 @@ class Settings(BaseSettings):
         if not 0 <= v <= 5:
             raise ValueError("NMAP_TIMING должен быть от 0 до 5")
         return v
+
+    @field_validator("nmap_min_rate")
+    @classmethod
+    def _rate(cls, v: int) -> int:
+        return max(0, min(v, 100000))
+
+    @field_validator("nmap_max_retries")
+    @classmethod
+    def _retries(cls, v: int) -> int:
+        return max(0, min(v, 10))
+
+    @field_validator("nmap_min_hostgroup")
+    @classmethod
+    def _hostgroup(cls, v: int) -> int:
+        return max(1, min(v, 4096))
 
     @field_validator("max_parallel_scans")
     @classmethod

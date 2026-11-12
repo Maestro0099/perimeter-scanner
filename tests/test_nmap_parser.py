@@ -148,3 +148,65 @@ def test_build_args_safe(tmp_path: Path) -> None:
         build_nmap_args(NmapOptions("full", 9, True, tmp_path / "t.txt", tmp_path / "o.xml"))
     with pytest.raises(ValidationError):
         build_nmap_args(NmapOptions("bogus", 3, True, tmp_path / "t.txt", tmp_path / "o.xml"))
+
+
+def test_two_phase_args(tmp_path: Path) -> None:
+    import dataclasses
+
+    from app.scanner.nmap_profiles import build_discovery_args, uses_two_phase
+
+    assert uses_two_phase("full") and uses_two_phase("aggressive") and not uses_two_phase("quick")
+    base = NmapOptions("full", 4, True, tmp_path / "t.txt", tmp_path / "o.xml", min_rate=2000, max_retries=1, min_hostgroup=128)
+    disc = build_discovery_args(base)
+    # фаза 1 — только поиск портов: без версий, ОС и скриптов
+    assert "-sS" in disc and "--open" in disc and disc[disc.index("-p") + 1] == "1-65535"
+    assert not {"-sV", "-O", "--script", "-sU"} & set(disc)
+    assert disc[disc.index("--min-rate") + 1] == "2000" and disc[disc.index("--max-retries") + 1] == "1"
+    assert disc[-2] == "-iL"
+    deep = build_nmap_args(dataclasses.replace(base, tcp_ports="22,443,8443"))
+    ports = deep[deep.index("-p") + 1]
+    assert ports.startswith("T:22,443,8443,U:")
+    assert {"-sV", "--version-all", "-O", "--traceroute", "-sU"} <= set(deep)
+    assert "ssl-enum-ciphers" in deep[deep.index("--script") + 1]
+    # TCP-портов не найдено — глубокая фаза только по UDP, без SYN
+    udp_only = build_nmap_args(dataclasses.replace(base, tcp_ports=""))
+    assert "-sS" not in udp_only and udp_only[udp_only.index("-p") + 1].startswith("U:")
+    for bad in ("22;id", "22,--script=x", "0", "70000", "22,,443"):
+        with pytest.raises(ValidationError):
+            build_nmap_args(dataclasses.replace(base, tcp_ports=bad))
+    with pytest.raises(ValidationError):
+        build_nmap_args(dataclasses.replace(base, privileged=False, tcp_ports=""))
+
+
+def test_plan_deep_scan(fixtures_dir: Path) -> None:
+    from app.scanner.engine import plan_deep_scan
+
+    run = parse_nmap_xml(load(fixtures_dir, "nmap_full.xml"))
+    targets = [(1, "ip", "198.51.100.5"), (2, "cidr", "203.0.113.0/28"), (3, "domain", "example.com")]
+    deep, ports = plan_deep_scan(targets, run.hosts)
+    # явные IP и домены — всегда; из подсети — только адреса с открытыми портами (.12 не отвечает)
+    assert deep == ["198.51.100.5", "example.com", "203.0.113.10", "203.0.113.11"]
+    assert ports == "21,22,80,443,3306,3389,6379"
+    deep_all, _ = plan_deep_scan(targets, run.hosts, udp_all_hosts=True)
+    assert deep_all == ["198.51.100.5", "203.0.113.0/28", "example.com"]
+    assert plan_deep_scan([(2, "cidr", "203.0.113.0/28")], []) == ([], "")
+
+
+def test_host_extra_and_ssl_enum(fixtures_dir: Path) -> None:
+    from app.scanner.nmap_parser import PortResult, ScriptResult, Service
+
+    run = parse_nmap_xml(load(fixtures_dir, "nmap_full.xml"))
+    extra = run.hosts[0].extra
+    assert extra["os_matches"][0] == {"name": "Linux 5.0 - 5.14", "accuracy": 95}
+    assert "Linux" in extra["service_os"]
+    port = PortResult("tcp", 443, "open", service=Service(name="https"), scripts=[ScriptResult(
+        "ssl-enum-ciphers", "...", {
+            "SSLv3": {"ciphers": [{"name": "TLS_RSA_WITH_RC4_128_SHA", "strength": "C"}], "warnings": ["Broken cipher RC4 is deprecated by RFC 7465"]},
+            "TLSv1.2": {"ciphers": [{"name": "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384", "strength": "A"}]},
+            "least strength": "C",
+        })])
+    host = run.hosts[1]
+    host.ports = [port]
+    f = {x.key: x for x in findings_from_host(host)}
+    assert f["nse:ssl-enum:grade"].severity == "medium" and "RC4" in f["nse:ssl-enum:grade"].evidence
+    assert f["nse:ssl-enum:sslv3"].severity == "high"

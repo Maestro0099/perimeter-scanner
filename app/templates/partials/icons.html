@@ -36,7 +36,7 @@
 {%- endmacro %}
 
 {% macro status_badge(status) -%}
-<span class="status-{{ status }}">{% if status == 'running' %}<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-500"></span>{% endif %}{{ STATUS_LABELS.get(status, status) }}</span>
+<span class="status-{{ status }}">{% if status == 'running' %}<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-500"></span>{% endif %}{{ STATUS_LABELS.get(status, status) }}</span>
 {%- endmacro %}
 
 {% macro csrf_input(request) -%}

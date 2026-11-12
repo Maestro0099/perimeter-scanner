@@ -112,3 +112,40 @@ def test_csv_formula_injection_is_neutralised() -> None:
 
     assert _csv_safe("=HYPERLINK(\"x\")") == "'=HYPERLINK(\"x\")"
     assert _csv_safe("normal") == "normal"
+
+
+def test_portless_subnet_hosts_are_not_stored(session, fixtures_dir: Path) -> None:
+    """При -Pn «живым» считается каждый адрес подсети; без открытых портов такие хосты не сохраняются."""
+    from app.models import Host
+
+    cidr = Target(kind="cidr", value="203.0.113.0/28")
+    explicit = Target(kind="ip", value="203.0.113.11")
+    session.add_all([cidr, explicit])
+    session.commit()
+    run = parse_nmap_xml((fixtures_dir / "nmap_full.xml").read_bytes())
+    for h in run.hosts:
+        h.status = "up"
+    run.hosts[1].ports = []  # явная цель без портов — сохраняется
+    scan = _make_scan(session, [cidr, explicit])
+    _store(scan.id, run.hosts, [cidr, explicit])
+    assert {h.ip for h in session.query(Host).filter_by(scan_id=scan.id)} == {"203.0.113.10", "203.0.113.11"}
+    assert session.query(Host).filter_by(ip="203.0.113.10").one().extra["os_matches"]
+
+
+def test_new_columns_are_added_to_existing_db(tmp_path) -> None:
+    import sqlite3
+
+    from app.db import _ensure_columns
+
+    dbmod.init_engine()
+    dbmod.create_all()
+    engine = dbmod.get_engine()
+    with engine.begin() as c:
+        c.exec_driver_sql("ALTER TABLE hosts DROP COLUMN extra")
+        c.exec_driver_sql("ALTER TABLE ports DROP COLUMN reason")
+    _ensure_columns(engine)
+    with engine.connect() as c:
+        cols = {r[1] for r in c.exec_driver_sql("PRAGMA table_info(hosts)")}
+        pcols = {r[1] for r in c.exec_driver_sql("PRAGMA table_info(ports)")}
+    assert "extra" in cols and "reason" in pcols
+    _ = sqlite3

@@ -108,7 +108,7 @@
   var charts = [];
   function themeColors() {
     var dark = document.documentElement.classList.contains("dark");
-    return { text: dark ? "#94a3b8" : "#64748b", grid: dark ? "rgba(148,163,184,0.12)" : "rgba(100,116,139,0.15)" };
+    return { text: dark ? "#94a3b8" : "#64748b", grid: dark ? "rgba(56,189,248,0.08)" : "rgba(100,116,139,0.15)" };
   }
 
   function initCharts(root) {
@@ -121,7 +121,8 @@
       var cfg = JSON.parse(src.textContent);
       var c = themeColors();
       Chart.defaults.color = c.text;
-      Chart.defaults.font.family = "Inter, Segoe UI, Roboto, sans-serif";
+      Chart.defaults.font.family = "JetBrains Mono, ui-monospace, monospace";
+      Chart.defaults.font.size = 11;
       cfg.options = cfg.options || {};
       cfg.options.responsive = true;
       cfg.options.maintainAspectRatio = false;

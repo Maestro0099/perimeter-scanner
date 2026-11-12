@@ -141,5 +141,13 @@ def change_password(
     assert db_user is not None
     db_user.password_hash = hash_password(new_password)
     db.commit()
+    # завершаем все остальные сессии пользователя
+    from app.auth import SESSION_COOKIE
+    from app.models import UserSession
+    from app.security.tokens import hash_token
+
+    current = hash_token(request.cookies.get(SESSION_COOKIE, ""))
+    db.query(UserSession).filter(UserSession.user_id == user.id, UserSession.token_hash != current).delete()
+    db.commit()
     audit(db, "password_change", "Смена собственного пароля", username=user.username, ip=client_ip(request))
     return _redirect("/account", msg="Пароль изменён")

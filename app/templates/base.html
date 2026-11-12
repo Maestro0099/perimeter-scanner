@@ -21,17 +21,17 @@
   <a href="{{ href }}" class="nav-link {{ 'active' if active }}" {% if active %}aria-current="page"{% endif %}>{{ icon(ico) }}<span>{{ label }}</span></a>
 {%- endmacro %}
 <div class="flex min-h-screen">
-  <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 flex hidden w-64 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 lg:flex">
-    <div class="flex h-16 items-center gap-2 border-b border-slate-200 px-5 dark:border-slate-800">
-      <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">{{ icon('shield', 'h-5 w-5') }}</span>
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 flex hidden w-64 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950/95 lg:flex">
+    <div class="flex h-16 items-center gap-3 border-b border-slate-200 px-5 dark:border-slate-800">
+      <span class="radar h-9 w-9 shrink-0" aria-hidden="true"></span>
       <div class="leading-tight">
-        <div class="text-sm font-semibold text-slate-900 dark:text-white">{{ app_name }}</div>
-        <div class="text-[11px] muted">внешний периметр</div>
+        <div class="font-mono text-[13px] font-semibold uppercase tracking-wider text-slate-900 dark:text-white">{{ app_name }}</div>
+        <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-accent-700 dark:text-accent-400">attack surface</div>
       </div>
       <button type="button" data-menu-toggle class="btn-ghost ml-auto lg:hidden" aria-label="Закрыть меню">{{ icon('x') }}</button>
     </div>
     <nav class="flex-1 space-y-0.5 overflow-y-auto px-3 py-3">
-      {{ nav('/', 'Дашборд', 'home', True) }}
+      {{ nav('/', 'Обзор', 'home', True) }}
       <div class="nav-section">Периметр</div>
       {{ nav('/targets', 'Цели', 'target') }}
       {{ nav('/scans', 'Сканирования', 'radar') }}
@@ -49,10 +49,13 @@
       {% endif %}
     </nav>
     {% if user %}
+    <div class="flex items-center gap-2 border-t border-slate-200 px-5 py-2.5 font-mono text-[10px] uppercase tracking-wider text-slate-500 dark:border-slate-800">
+      <span class="live-dot"></span><span>система активна</span>
+    </div>
     <div class="border-t border-slate-200 p-3 dark:border-slate-800">
       <div class="flex items-center gap-2">
         <a href="/account" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800">
-          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-semibold uppercase text-slate-700 dark:bg-slate-700 dark:text-slate-200">{{ user.username[:1] }}</span>
+          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent-100 font-mono text-sm font-semibold uppercase text-accent-800 dark:bg-accent-400/15 dark:text-accent-300">{{ user.username[:1] }}</span>
           <span class="min-w-0">
             <span class="block truncate text-sm font-medium text-slate-900 dark:text-white">{{ user.username }}</span>
             <span class="block text-[11px] muted">{{ 'Администратор' if user.is_admin else 'Только просмотр' }}</span>
@@ -68,7 +71,7 @@
   </aside>
 
   <div class="flex min-w-0 flex-1 flex-col lg:pl-64">
-    <header class="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/80 px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80 sm:px-6">
+    <header class="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/80 px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80 sm:px-6">
       <button type="button" data-menu-toggle class="btn-ghost lg:hidden" aria-label="Меню">{{ icon('menu') }}</button>
       <div class="min-w-0 flex-1">
         {% block breadcrumbs %}{% endblock %}
@@ -82,7 +85,7 @@
     <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">
       {% block content %}{% endblock %}
     </main>
-    <footer class="px-6 pb-6 text-center text-xs muted">Внутренний инструмент. Сканируются только утверждённые цели организации.</footer>
+    <footer class="px-6 pb-6 text-center font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-600">внутренний инструмент · сканируются только утверждённые цели организации</footer>
   </div>
 </div>
 </body>

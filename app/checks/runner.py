@@ -39,6 +39,16 @@ class Endpoint:
     sni: str | None = None
 
 
+def _is_special(ip: str) -> bool:
+    import ipaddress
+
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return True
+    return a.is_loopback or a.is_link_local or a.is_multicast or a.is_unspecified or a.is_reserved
+
+
 def endpoints_from_hosts(hosts: list[Host]) -> list[Endpoint]:
     eps: list[Endpoint] = []
     for h in hosts:
@@ -170,7 +180,10 @@ class ChecksRunner:
             if ep.asset_type == "ip":
                 return True
             if ep.host not in resolvable:
-                resolvable[ep.host] = bool(resolve_ips(ep.host, resolver))
+                ips = resolve_ips(ep.host, resolver)
+                # Имя из внешних источников (crt.sh) может указывать на служебный адрес
+                # (loopback, link-local, метаданные облака) — к таким не обращаемся.
+                resolvable[ep.host] = bool(ips) and not any(_is_special(ip) for ip in ips)
             return resolvable[ep.host]
 
         endpoints = [e for e in endpoints if ok(e)]

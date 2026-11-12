@@ -219,6 +219,8 @@ class Host(Base):
     os_name: Mapped[str] = mapped_column(String(255), default="")
     os_accuracy: Mapped[int] = mapped_column(Integer, default=0)
     host_scripts: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # дополнительные сведения: варианты ОС, uptime, расстояние, traceroute, типы устройств
+    extra: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
     scan: Mapped[Scan] = relationship(back_populates="hosts")
     ports: Mapped[list[Port]] = relationship(
@@ -234,6 +236,7 @@ class Port(Base):
     protocol: Mapped[str] = mapped_column(String(8))
     port: Mapped[int] = mapped_column(Integer)
     state: Mapped[str] = mapped_column(String(24))
+    reason: Mapped[str] = mapped_column(String(32), default="")
     service: Mapped[str] = mapped_column(String(64), default="")
     product: Mapped[str] = mapped_column(String(255), default="")
     version: Mapped[str] = mapped_column(String(128), default="")

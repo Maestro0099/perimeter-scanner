@@ -33,7 +33,7 @@
             <div class="text-xs muted">{{ CATEGORY_LABELS.get(f.category, f.category) }}</div>
             {% if f.description or f.evidence %}
             <details class="mt-1 text-xs">
-              <summary class="cursor-pointer text-indigo-600 dark:text-indigo-400">Подробности</summary>
+              <summary class="cursor-pointer text-accent-600 dark:text-accent-400">Подробности</summary>
               {% if f.description %}<p class="mt-1 whitespace-pre-line">{{ f.description }}</p>{% endif %}
               {% if f.evidence %}<pre class="pre mt-2">{{ f.evidence }}</pre>{% endif %}
             </details>
@@ -59,14 +59,14 @@
     <tbody>
     {% for p in ports %}
       <tr>
-        <td class="whitespace-nowrap font-mono" data-value="{{ p.port }}">{{ p.port }}/{{ p.protocol }}{% if p.tunnel %} <span class="badge-neutral">{{ p.tunnel }}</span>{% endif %}</td>
+        <td class="whitespace-nowrap font-mono" data-value="{{ p.port }}">{{ p.port }}/{{ p.protocol }}{% if p.tunnel %} <span class="badge-neutral">{{ p.tunnel }}</span>{% endif %}{% if p.reason %}<div class="text-[10px] muted">{{ p.reason }}</div>{% endif %}</td>
         <td>{{ p.service or '—' }}</td>
         <td class="text-xs">{{ p.service_label or '—' }}{% if p.extrainfo %}<div class="muted">{{ p.extrainfo }}</div>{% endif %}
           {% for c in p.cpe %}<div class="mono muted">{{ c }}</div>{% endfor %}</td>
         <td class="min-w-[14rem] text-xs">
           {% for s in p.scripts %}
           <details>
-            <summary class="cursor-pointer font-mono text-indigo-600 dark:text-indigo-400">{{ s.id }}</summary>
+            <summary class="cursor-pointer font-mono text-accent-600 dark:text-accent-400">{{ s.id }}</summary>
             <pre class="pre my-1">{{ s.output }}</pre>
           </details>
           {% else %}<span class="muted">—</span>{% endfor %}
@@ -92,19 +92,20 @@
 {%- endmacro %}
 
 {% macro changes_list(changes, show_scan=False) -%}
-<ul class="divide-y divide-slate-100 dark:divide-slate-800">
+<div>
   {% for c in changes %}
-  <li class="flex items-start gap-3 px-4 py-2.5">
-    <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full sev-dot-{{ c.severity }}"></span>
+  <div class="log-line">
+    <span class="log-time">{{ c.created_at|dt('%d.%m %H:%M') }}</span>
+    <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full sev-dot-{{ c.severity }}"></span>
     <div class="min-w-0 flex-1">
-      <div class="text-sm"><span class="font-medium">{{ CHANGE_LABELS.get(c.change_type, c.change_type) }}</span>
-        · <a href="/assets/{{ c.asset_type }}/{{ c.asset }}" class="font-mono text-xs">{{ c.asset }}</a></div>
-      <div class="text-xs muted">{{ c.description }}</div>
+      <span class="font-semibold uppercase sev-text-{{ c.severity }}">{{ CHANGE_LABELS.get(c.change_type, c.change_type) }}</span>
+      <a href="/assets/{{ c.asset_type }}/{{ c.asset }}">{{ c.asset }}</a>
+      <div class="font-sans text-xs muted">{{ c.description }}</div>
     </div>
-    <div class="shrink-0 text-right text-xs muted">{{ c.created_at|dt }}{% if show_scan %}<div><a href="/scans/{{ c.scan_id }}">скан #{{ c.scan_id }}</a></div>{% endif %}</div>
-  </li>
+    {% if show_scan %}<a href="/scans/{{ c.scan_id }}" class="shrink-0">#{{ c.scan_id }}</a>{% endif %}
+  </div>
   {% else %}
-  <li class="px-4 py-8 text-center text-sm muted">Изменений нет</li>
+  <div class="px-4 py-8 text-center text-sm muted">Изменений нет</div>
   {% endfor %}
-</ul>
+</div>
 {%- endmacro %}

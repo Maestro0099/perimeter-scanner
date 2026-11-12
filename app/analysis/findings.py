@@ -111,6 +111,57 @@ def _port_findings(ip: str, port: PortResult) -> list[FindingData]:
         )
 
     out.extend(_script_rule_findings(ip, port.scripts, port))
+    out.extend(_ssl_enum_findings(ip, port))
+    return out
+
+
+_GRADE_SEVERITY = {"B": "low", "C": "medium", "D": "high", "E": "high", "F": "high"}
+
+
+def _ssl_enum_findings(ip: str, port: PortResult) -> list[FindingData]:
+    """Находки по выводу ssl-enum-ciphers: оценка стойкости шифров и устаревшие протоколы."""
+    script = port.script("ssl-enum-ciphers")
+    if script is None or not isinstance(script.data, dict):
+        return []
+    data = script.data
+    out: list[FindingData] = []
+    protocols = [k for k in data if k.upper().startswith(("SSL", "TLS"))]
+    grade = str(data.get("least strength", "")).strip().upper()
+    warnings: list[str] = []
+    weak: list[str] = []
+    for proto in protocols:
+        section = data.get(proto)
+        if not isinstance(section, dict):
+            continue
+        w = section.get("warnings")
+        if isinstance(w, list):
+            warnings += [str(x) for x in w]
+        ciphers = section.get("ciphers")
+        for c in ciphers if isinstance(ciphers, list) else []:
+            if isinstance(c, dict) and str(c.get("strength", "A")).upper() in _GRADE_SEVERITY:
+                weak.append(f"{proto}: {c.get('name')} ({c.get('strength')})")
+    evidence = "\n".join(sorted(set(weak))[:30] + sorted(set(warnings))[:10])
+    if grade in _GRADE_SEVERITY:
+        out.append(
+            FindingData(
+                asset=ip, asset_type="ip", category="tls", severity=_GRADE_SEVERITY[grade],
+                title=f"Слабые шифры TLS (оценка {grade}) — {port.key}",
+                description="Сервер принимает шифронаборы пониженной стойкости (по данным nmap ssl-enum-ciphers).",
+                recommendation="Отключите слабые шифронаборы (RC4, 3DES, CBC с SHA-1, RSA-обмен), оставьте AEAD-шифры с ECDHE.",
+                port=port.port, protocol=port.protocol, evidence=evidence, key="nse:ssl-enum:grade",
+            )
+        )
+    legacy = [p for p in protocols if p.upper().startswith("SSL")]
+    if legacy:
+        out.append(
+            FindingData(
+                asset=ip, asset_type="ip", category="tls", severity="high",
+                title=f"Поддерживается {', '.join(sorted(legacy))} — {port.key}",
+                description="Протоколы SSL небезопасны (POODLE и др.).",
+                recommendation="Отключите SSLv2/SSLv3, оставьте TLS 1.2 и TLS 1.3.",
+                port=port.port, protocol=port.protocol, evidence=", ".join(sorted(protocols)), key="nse:ssl-enum:sslv3",
+            )
+        )
     return out
 
 

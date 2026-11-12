@@ -23,7 +23,7 @@
           <td class="whitespace-nowrap text-xs" data-value="{{ r.ts.isoformat() }}">{{ r.ts|dt('%d.%m.%Y %H:%M:%S') }}</td>
           <td class="font-medium">{{ r.username }}</td>
           <td class="mono">{{ r.ip }}</td>
-          <td><span class="{{ 'sev-high' if r.action in ('login_failed', 'login_locked') else ('badge-indigo' if r.action == 'scan_start' else 'badge-neutral') }}">{{ ACTION_LABELS.get(r.action, r.action) }}</span></td>
+          <td><span class="{{ 'sev-high' if r.action in ('login_failed', 'login_locked') else ('badge-accent' if r.action == 'scan_start' else 'badge-neutral') }}">{{ ACTION_LABELS.get(r.action, r.action) }}</span></td>
           <td class="max-w-xl break-words text-xs">{{ r.details }}</td>
         </tr>
       {% else %}

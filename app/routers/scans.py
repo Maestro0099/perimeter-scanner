@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app import app_settings
 from app.audit import audit
 from app.auth import client_ip, current_user, require_admin
 from app.config import get_settings
@@ -17,7 +18,9 @@ from app.models import SEVERITY_ORDER, Change, Finding, Group, Scan, ScanStatus,
 from app.scanner.engine import ScanRequestError, active_scans, create_scan, scan_manager, scan_xml_path
 from app.scanner.nmap_profiles import PROFILES
 from app.scanner.nmap_runner import nmap_available
+from app.targets_service import create_or_update_target
 from app.templating import render
+from app.validation import ValidationError
 
 router = APIRouter()
 
@@ -73,7 +76,7 @@ def new_scan_page(
             "targets": targets,
             "groups": groups,
             "profiles": PROFILES,
-            "default_timing": get_settings().nmap_timing,
+            "default_timing": app_settings.load(db).nmap_timing,
             "preselect_group": group,
             "preselect_target": target,
             "nmap_ok": nmap_available(get_settings().nmap_path),
@@ -90,11 +93,30 @@ async def start_scan(request: Request, user: User = Depends(require_admin), db: 
         target_ids = sorted({int(v) for v in form.getlist("target_ids") if str(v).isdigit()})
         group_raw = str(form.get("group_id") or "")
         group_id = int(group_raw) if group_raw.isdigit() else None
-        if group_id and not target_ids:
+        if group_id and not target_ids and not str(form.get("new_targets") or "").strip():
             group = db.get(Group, group_id)
             if not group:
                 raise ScanRequestError("Группа не найдена")
             target_ids = [t.id for t in group.targets if t.approved]
+        new_raw = str(form.get("new_targets") or "")[:20000]
+        new_lines = [ln.strip() for ln in new_raw.replace(",", "\n").splitlines() if ln.strip()]
+        if len(new_lines) > 200:
+            raise ScanRequestError("Не более 200 новых целей за один запуск")
+        if new_lines:
+            # новые адреса сначала попадают в утверждённый список (с записью в аудит) и только затем сканируются
+            group = db.get(Group, group_id) if group_id else None
+            added: list[str] = []
+            try:
+                for line in new_lines:
+                    t, _ = create_or_update_target(db, line, group=group, created_by=user.username)
+                    added.append(t.value)
+                    target_ids.append(t.id)
+            except ValidationError as exc:
+                db.rollback()
+                raise ScanRequestError(f"{line}: {exc}") from exc
+            db.commit()
+            audit(db, "target_add", ", ".join(added)[:3000], username=user.username, ip=client_ip(request))
+            target_ids = sorted(set(target_ids))
         profile = str(form.get("profile") or "quick")
         timing_raw = str(form.get("timing") or "")
         timing = int(timing_raw) if timing_raw.isdigit() else None

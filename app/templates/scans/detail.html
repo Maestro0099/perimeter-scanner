@@ -65,7 +65,7 @@
     {% if h.host_scripts %}
     <div class="border-t border-slate-200 px-4 py-3 text-xs dark:border-slate-800">
       <div class="label">Скрипты уровня хоста</div>
-      {% for s in h.host_scripts %}<details><summary class="cursor-pointer font-mono text-indigo-600 dark:text-indigo-400">{{ s.id }}</summary><pre class="pre my-1">{{ s.output }}</pre></details>{% endfor %}
+      {% for s in h.host_scripts %}<details><summary class="cursor-pointer font-mono text-accent-600 dark:text-accent-400">{{ s.id }}</summary><pre class="pre my-1">{{ s.output }}</pre></details>{% endfor %}
     </div>
     {% endif %}
   </div>
