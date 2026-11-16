@@ -39,6 +39,10 @@ ACTION_LABELS = {
     "notify_test": "Тест уведомлений",
     "report_export": "Экспорт отчёта",
     "subdomain_promote": "Поддомен добавлен в цели",
+    "active_test_start": "Запуск активной проверки",
+    "active_test_finding": "Находка активной проверки",
+    "active_test_cancel": "Отмена активной проверки",
+    "active_test_delete": "Удаление активной проверки",
 }
 
 

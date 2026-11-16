@@ -1,0 +1,24 @@
+# Пары логин:пароль по умолчанию для типового оборудования и ПО.
+admin:admin
+admin:password
+admin:admin123
+admin:1234
+admin:12345
+admin:changeme
+root:root
+root:toor
+root:admin
+root:password
+root:calvin
+cisco:cisco
+tomcat:tomcat
+tomcat:s3cret
+postgres:postgres
+mysql:mysql
+sa:sa
+sa:password
+oracle:oracle
+user:user
+guest:guest
+ubnt:ubnt
+pi:raspberry

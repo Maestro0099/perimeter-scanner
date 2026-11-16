@@ -159,9 +159,39 @@
   });
   document.addEventListener("DOMContentLoaded", syncProfile);
 
+  // --- Форма подбора учётных данных (Hydra) ---
+  function initHydraForm(root) {
+    var svc = root.querySelector("[data-hydra-service]");
+    if (!svc || svc.dataset.ready) return;
+    svc.dataset.ready = "1";
+    var port = root.querySelector("[data-hydra-port]");
+    var formOpt = root.querySelector("[data-hydra-form-opt]");
+    function syncService() {
+      var opt = svc.options[svc.selectedIndex];
+      if (port && (!port.value || port.dataset.auto !== "0")) { port.value = opt.getAttribute("data-port") || ""; port.dataset.auto = "1"; }
+      if (formOpt) formOpt.hidden = opt.getAttribute("data-form") !== "1";
+    }
+    if (port) port.addEventListener("input", function () { port.dataset.auto = "0"; });
+    svc.addEventListener("change", syncService);
+    syncService();
+
+    var toggle = root.querySelector("[data-hydra-combo-toggle]");
+    var comboBox = root.querySelector("[data-hydra-combo]");
+    var combo = comboBox ? comboBox.querySelector("select") : null;
+    var pair = root.querySelector("[data-hydra-pair]");
+    if (toggle && comboBox && combo && pair) {
+      toggle.addEventListener("change", function () {
+        comboBox.hidden = !toggle.checked;
+        combo.disabled = !toggle.checked;
+        pair.querySelectorAll("select").forEach(function (sel) { sel.disabled = toggle.checked; });
+      });
+    }
+  }
+
   function init(root) {
     root.querySelectorAll("table[data-table]").forEach(enhanceTable);
     initCharts(root);
+    initHydraForm(root);
   }
 
   document.addEventListener("DOMContentLoaded", function () { init(document); });

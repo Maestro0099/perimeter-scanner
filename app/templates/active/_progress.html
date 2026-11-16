@@ -1,0 +1,11 @@
+{% from "partials/icons.html" import status_badge %}
+<div id="active-progress" {% if test.is_active %}hx-get="/active/{{ test.id }}/progress" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
+    <div class="flex items-center gap-2">{{ status_badge(test.status) }}<span class="muted">{{ test.stage }}</span></div>
+    <span class="font-mono font-semibold tabular-nums">{{ test.progress|round|int }}%</span>
+  </div>
+  <div class="progress mt-2" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ test.progress|round|int }}">
+    <span class="{{ 'is-active' if test.is_active }} {{ 'bar-' ~ test.status if test.status in ('done', 'failed') else '' }}" style="width: {{ [test.progress, 2]|max if test.status != 'queued' else 0 }}%"></span>
+  </div>
+  {% if test.error %}<div class="alert-error mt-3">{{ test.error }}</div>{% endif %}
+</div>

@@ -57,6 +57,23 @@ class Settings(BaseSettings):
     host_timeout_minutes: int = 60
     script_timeout_minutes: int = 5
 
+    # --- Активные проверки (Hydra, Metasploit) ---
+    # Активные проверки запускаются только вручную администратором, с подтверждением,
+    # по одной цели, без расписания. Любую из них можно полностью отключить здесь.
+    active_tests_enabled: bool = True
+    hydra_enabled: bool = True
+    hydra_path: str = "hydra"
+    hydra_default_tasks: int = 4
+    hydra_max_tasks: int = 16
+    hydra_max_attempts: int = 2000
+    hydra_timeout_minutes: int = 30
+    msf_enabled: bool = False
+    msf_rpc_host: str = "127.0.0.1"
+    msf_rpc_port: int = 55553
+    msf_rpc_ssl: bool = True
+    msf_rpc_password: str = ""
+    msf_timeout_minutes: int = 20
+
     # --- Проверки доменов / веба ---
     dns_timeout: float = 5.0
     http_timeout: float = 10.0
@@ -103,6 +120,16 @@ class Settings(BaseSettings):
     @classmethod
     def _hostgroup(cls, v: int) -> int:
         return max(1, min(v, 4096))
+
+    @field_validator("hydra_default_tasks", "hydra_max_tasks")
+    @classmethod
+    def _hydra_tasks(cls, v: int) -> int:
+        return max(1, min(v, 64))
+
+    @field_validator("hydra_max_attempts")
+    @classmethod
+    def _hydra_attempts(cls, v: int) -> int:
+        return max(1, min(v, 100000))
 
     @field_validator("max_parallel_scans")
     @classmethod

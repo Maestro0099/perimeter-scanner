@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon, flash, status_badge, sev_badge, empty_row %}
+{% block title %}Активные проверки{% endblock %}
+{% block content %}
+{{ flash(msg, err) }}
+<div class="card sev-border-high mb-6">
+  <div class="card-body flex items-start gap-3 text-sm">
+    {{ icon('alert', 'h-5 w-5 shrink-0 text-orange-500') }}
+    <div>
+      <b>Активные проверки воздействуют на цель.</b> Подбор паролей может заблокировать учётные записи, эксплуатация — нарушить работу сервиса. Запускайте только по собственным, утверждённым целям и только по согласованию с владельцами систем. Каждый запуск требует подтверждения и записывается в журнал аудита.
+    </div>
+  </div>
+</div>
+
+<div class="card" data-table-wrap>
+  <div class="card-header">
+    <div class="flex flex-wrap items-center gap-2">
+      <input type="search" data-table-search class="input w-52" placeholder="Поиск…" aria-label="Поиск">
+      <select data-table-filter="status" class="input w-auto" aria-label="Статус">
+        <option value="">Все статусы</option>
+        {% for k, l in STATUS_LABELS.items() %}<option value="{{ k }}">{{ l }}</option>{% endfor %}
+      </select>
+    </div>
+    {% if user.is_admin %}
+    <a href="/active/hydra/new" class="btn-primary">{{ icon('key', 'h-4 w-4') }} Подбор учётных данных</a>
+    {% endif %}
+  </div>
+  <div class="table-wrap">
+    <table class="table" data-table>
+      <thead><tr>
+        <th data-sort>№</th><th data-sort>Тип</th><th data-sort>Цель</th><th>Параметры</th>
+        <th data-sort>Статус</th><th data-sort>Результат</th><th data-sort>Запустил</th><th data-sort>Когда</th>
+      </tr></thead>
+      <tbody>
+      {% for t in tests %}
+        <tr data-status="{{ t.status }}">
+          <td data-value="{{ t.id }}"><a href="/active/{{ t.id }}" class="font-medium">#{{ t.id }}</a></td>
+          <td class="text-xs">{{ ACTIVE_TEST_LABELS.get(t.kind, t.kind) }}</td>
+          <td class="font-mono text-xs">{{ t.asset }}{% if t.port %}:{{ t.port }}{% endif %}</td>
+          <td class="text-xs muted">{{ t.service }}{% if t.params.get('attempts') %} · {{ t.params.attempts }} комб.{% endif %}</td>
+          <td>{{ status_badge(t.status) }}</td>
+          <td data-value="{{ t.result.get('found_count', 0) if t.result else 0 }}">
+            {% if t.status == 'done' and t.result %}
+              {% if t.result.get('found_count') %}<span class="sev-critical">{{ icon('key', 'h-3 w-3') }} найдено: {{ t.result.found_count }}</span>
+              {% else %}<span class="badge-green">слабых не найдено</span>{% endif %}
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td class="text-xs">{{ t.started_by }}</td>
+          <td class="whitespace-nowrap text-xs muted" data-value="{{ t.created_at.isoformat() }}">{{ t.created_at|dt }}</td>
+        </tr>
+      {% else %}
+        {{ empty_row(8, "Активных проверок ещё не было") }}
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
