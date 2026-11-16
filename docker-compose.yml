@@ -10,6 +10,9 @@ services:
       APP_PORT: "8000"
       DATA_DIR: /app/data
       TARGETS_FILE: /app/targets.yaml
+      # Контейнер Metasploit (поднимается только с профилем msf) доступен приложению
+      # по внутренней сети Docker под именем msf. Снаружи порт RPC не публикуется.
+      MSF_RPC_HOST: msf
     ports:
       # По умолчанию интерфейс доступен только с самой ВМ (127.0.0.1).
       - "${BIND_ADDRESS:-127.0.0.1}:${BIND_PORT:-8000}:8000"
@@ -34,6 +37,41 @@ services:
       resources:
         limits:
           memory: 2g
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # Metasploit для активных проверок (эксплуатация). Поднимается ОТДЕЛЬНО и только
+  # по явному требованию:  docker compose --profile msf up -d
+  # Демон msfrpcd доступен приложению по внутренней сети Docker (msf:55553) и
+  # НЕ публикуется на хост. Для активации также задайте в .env:
+  #   MSF_ENABLED=true  и  MSF_RPC_PASSWORD=<длинный секрет>
+  msf:
+    image: metasploitframework/metasploit-framework:6.4.44
+    container_name: perimeter-msf
+    profiles: ["msf"]
+    restart: unless-stopped
+    environment:
+      # Пустое значение по умолчанию, чтобы `docker compose up` без профиля msf
+      # (когда этот контейнер не запускается) не падал на интерполяции.
+      MSF_RPC_PASSWORD: ${MSF_RPC_PASSWORD:-}
+    # msfrpcd слушает RPC по TLS (самоподписанный) внутри сети Docker.
+    # Пароль обязателен только при фактическом запуске профиля msf.
+    command:
+      - sh
+      - -c
+      - 'test -n "$$MSF_RPC_PASSWORD" || { echo "Задайте MSF_RPC_PASSWORD в .env перед запуском профиля msf" >&2; exit 1; }; exec ./msfrpcd -U msf -P "$$MSF_RPC_PASSWORD" -a 0.0.0.0 -p 55553 -f'
+    expose:
+      - "55553"
+    # Эксплойт-модулям могут понадобиться сырые сокеты; наружу контейнер не открыт.
+    cap_add:
+      - NET_RAW
+    deploy:
+      resources:
+        limits:
+          memory: 3g
     logging:
       driver: json-file
       options:

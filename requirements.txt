@@ -10,6 +10,7 @@ pydantic-settings==2.6.1
 PyYAML==6.0.2
 dnspython==2.7.0
 httpx==0.28.1
+msgpack==1.1.0
 defusedxml==0.7.1
 cryptography==44.0.0
 weasyprint==63.1

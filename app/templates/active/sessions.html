@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon, flash, csrf_input %}
+{% block title %}Сессии Metasploit{% endblock %}
+{% block breadcrumbs %}<a href="/active" class="text-xs muted">← Активные проверки</a>{% endblock %}
+{% block content %}
+{{ flash(msg, err) }}
+{% if conn_err %}<div class="alert-error mb-4">Нет связи с Metasploit: {{ conn_err }}</div>{% endif %}
+
+<div class="card">
+  <div class="card-header">
+    <h2>Активные сессии</h2>
+    <a href="/active/msf/sessions" class="btn-secondary btn-sm">{{ icon('radar', 'h-4 w-4') }} Обновить</a>
+  </div>
+  {% if sessions %}
+  <div class="alert-warning mx-4 mt-4 text-sm">Открытые сессии — это активный доступ к боевым системам. Закрывайте их сразу после проверки.</div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>ID</th><th>Тип</th><th>Узел</th><th>Через эксплойт</th><th>Информация</th><th></th></tr></thead>
+      <tbody>
+      {% for sid, s in sessions.items() %}
+        <tr>
+          <td class="font-mono font-semibold">{{ sid }}</td>
+          <td class="font-mono text-xs">{{ s.get('type', '') }}</td>
+          <td class="font-mono text-xs">{{ s.get('tunnel_peer', '') or s.get('session_host', '') }}</td>
+          <td class="font-mono text-xs muted">{{ s.get('via_exploit', '') }}</td>
+          <td class="max-w-xs break-words text-xs">{{ s.get('info', '') }}</td>
+          <td class="text-right">
+            <form method="post" action="/active/msf/sessions/{{ sid }}/stop" data-confirm-submit="Закрыть сессию {{ sid }}?">
+              {{ csrf_input(request) }}<button class="btn-danger btn-sm">{{ icon('x', 'h-4 w-4') }} Закрыть</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% elif not conn_err %}
+  <div class="card-body flex items-center gap-2 text-sm muted">{{ icon('shield', 'h-5 w-5 text-emerald-500') }} Открытых сессий нет.</div>
+  {% endif %}
+</div>
+{% endblock %}

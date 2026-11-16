@@ -37,7 +37,32 @@
   <div class="card-body text-sm">{{ test.authorization or '—' }}</div>
 </div>
 
-{% if not test.is_active and test.status == 'done' %}
+{% if not test.is_active and test.status == 'done' and test.kind != 'hydra' %}
+{% set r = test.result or {} %}
+<div class="card mt-6 sev-border-{{ test.severity }}">
+  <div class="card-header">
+    <h2>Результат</h2>
+    <span class="sev-{{ test.severity }}">{{ SEVERITY_LABELS.get(test.severity, test.severity) }}</span>
+  </div>
+  <div class="card-body space-y-3 text-sm">
+    {% if test.kind == 'msf_check' %}
+      <div><span class="label inline">Вывод проверки:</span> <b>{{ r.get('status', r.get('code', '—')) }}</b> <span class="mono muted">(code: {{ r.get('code', '—') }})</span></div>
+      {% if r.get('message') %}<div class="muted">{{ r.message }}</div>{% endif %}
+      {% if test.severity in ('high','medium') %}<div class="alert-warning">Цель подтверждена как уязвимая. Устраните уязвимость и ограничьте доступ к сервису.</div>{% endif %}
+    {% elif test.kind == 'msf_exploit' %}
+      <div><b>{{ r.get('status', '—') }}</b></div>
+      {% if r.get('success') %}
+        <div class="alert-error">Эксплуатация успешна — получен доступ к системе. Это критическая уязвимость; закройте доступ и устраните причину. Открытые сессии завершите на странице <a href="/active/msf/sessions">Сессии</a>.</div>
+        <div class="table-wrap"><table class="table"><thead><tr><th>Сессия</th><th>Тип</th><th>Узел</th></tr></thead><tbody>
+          {% for ss in r.get('sessions', []) %}<tr><td class="font-mono">{{ ss.id }}</td><td class="font-mono text-xs">{{ ss.type }}</td><td class="font-mono text-xs">{{ ss.tunnel_peer }}</td></tr>{% endfor %}
+        </tbody></table></div>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if not test.is_active and test.status == 'done' and test.kind == 'hydra' %}
 {% set found = test.result.get('found', []) if test.result else [] %}
 <div class="card mt-6 {{ 'sev-border-critical' if found else 'sev-border-info' }}">
   <div class="card-header">

@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon, flash, csrf_input %}
+{% set is_exploit = kind == 'exploit' %}
+{% block title %}{{ 'Эксплуатация' if is_exploit else 'Проверка эксплуатируемости' }}{% endblock %}
+{% block breadcrumbs %}<a href="/active" class="text-xs muted">← Активные проверки</a>{% endblock %}
+{% block content %}
+{{ flash('', err) }}
+{% if not msf_ready %}<div class="alert-error mb-4">Metasploit не настроен: включите <code>MSF_ENABLED=true</code>, задайте <code>MSF_RPC_PASSWORD</code> и поднимите контейнер <code>docker compose --profile msf up -d</code>. См. README.</div>{% endif %}
+
+<div class="card {{ 'sev-border-critical' if is_exploit else 'sev-border-high' }} mb-6">
+  <div class="card-body flex items-start gap-3 text-sm">
+    {{ icon('alert', 'h-6 w-6 shrink-0 ' ~ ('text-rose-500' if is_exploit else 'text-orange-500')) }}
+    <div class="space-y-1">
+      {% if is_exploit %}
+      <b>Эксплуатация запускает реальный эксплойт по цели.</b>
+      <ul class="list-disc space-y-0.5 pl-5 text-slate-600 dark:text-slate-400">
+        <li>Может <b>нарушить работу сервиса</b> или оставить активную сессию на боевой системе.</li>
+        <li>Запускайте только по письменному согласованию, в согласованное окно. Открытые сессии закрывайте на странице «Сессии».</li>
+        <li>Адрес берётся из выбранной цели — переопределить RHOSTS нельзя. Если не уверены — используйте сначала «Проверку эксплуатируемости».</li>
+      </ul>
+      {% else %}
+      <b>Проверка эксплуатируемости (check).</b> Подтверждает, уязвима ли цель, <b>не запуская нагрузку</b> — риск минимален. Это рекомендуемый первый шаг перед эксплуатацией.
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<datalist id="msf-modules">
+  {% for m in suggestions %}<option value="{{ m.name }}">{{ m.type }} · {{ m.desc }}</option>{% endfor %}
+</datalist>
+
+<form method="post" action="/active/msf" class="grid gap-6 lg:grid-cols-3" id="msf-form">
+  {{ csrf_input(request) }}
+  <input type="hidden" name="kind" value="{{ kind }}">
+  <div class="space-y-6 lg:col-span-2">
+    <div class="card">
+      <div class="card-header"><h2>Цель и модуль</h2></div>
+      <div class="card-body space-y-4">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="label" for="target_id">Цель (только утверждённые)</label>
+            <select id="target_id" name="target_id" class="input font-mono" required>
+              <option value="">— выберите —</option>
+              {% for t in targets %}<option value="{{ t.id }}" {{ 'selected' if preselect_target == t.id }}>{{ t.value }} ({{ KIND_LABELS[t.kind] }})</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="label" for="port">Порт (RPORT, необязательно)</label>
+            <input id="port" name="port" class="input font-mono" inputmode="numeric" placeholder="по умолчанию модуля">
+          </div>
+        </div>
+        <div class="grid grid-cols-4 gap-2">
+          <div>
+            <label class="label" for="module_type">Тип</label>
+            <select id="module_type" name="module_type" class="input">
+              <option value="exploit">exploit</option>
+              {% if not is_exploit %}<option value="auxiliary">auxiliary</option>{% endif %}
+            </select>
+          </div>
+          <div class="col-span-3">
+            <label class="label" for="module_name">Модуль</label>
+            <input id="module_name" name="module_name" class="input font-mono" list="msf-modules" required
+                   placeholder="windows/smb/ms17_010_eternalblue" maxlength="200">
+          </div>
+        </div>
+        <p class="text-xs muted">Имя без префикса типа. Список — подсказки распространённых модулей; можно ввести любой.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Параметры модуля</h2></div>
+      <div class="card-body space-y-4">
+        {% if is_exploit %}
+        <div>
+          <label class="label" for="payload">Нагрузка (PAYLOAD, необязательно)</label>
+          <input id="payload" name="payload" class="input font-mono" maxlength="200" placeholder="по умолчанию модуля, напр. cmd/unix/reverse">
+          <p class="mt-1 text-xs muted">Для reverse-нагрузок задайте LHOST/LPORT в опциях ниже.</p>
+        </div>
+        {% endif %}
+        <div>
+          <label class="label" for="options">Дополнительные опции (по одной в строке, KEY=значение)</label>
+          <textarea id="options" name="options" rows="4" class="input font-mono" placeholder="SSL=true&#10;TARGETURI=/&#10;LHOST=203.0.113.5"></textarea>
+          <p class="mt-1 text-xs muted">RHOSTS/RPORT задавать не нужно — берутся из цели и порта выше.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card {{ 'sev-border-critical' if is_exploit else 'sev-border-high' }}" id="confirm">
+    <div class="card-header"><h2>Подтверждение запуска</h2></div>
+    <div class="card-body space-y-3">
+      <div>
+        <label class="label" for="authorization">Основание (разрешение, номер заявки) <span class="text-rose-500">*</span></label>
+        <textarea id="authorization" name="authorization" rows="2" class="input" required maxlength="1000"
+                  placeholder="Напр.: заявка PENTEST-142, согласовано с владельцем сервиса"></textarea>
+        <p class="mt-1 text-xs muted">Будет записано в журнал аудита.</p>
+      </div>
+      <label class="flex items-start gap-2 text-sm">
+        <input type="checkbox" name="confirm" class="checkbox mt-0.5">
+        {% if is_exploit %}Я согласовал эксплуатацию с владельцами систем и понимаю риск нарушения работы сервиса
+        {% else %}Я согласовал проверку с владельцами систем{% endif %}
+      </label>
+      <div>
+        <label class="label" for="confirm_text">Введите «ПОДТВЕРЖДАЮ»</label>
+        <input id="confirm_text" name="confirm_text" class="input" autocomplete="off">
+      </div>
+      <button class="btn-primary w-full py-2.5" {{ 'disabled' if not targets or not msf_ready }}>
+        {{ icon('bolt', 'h-4 w-4') }} {{ 'Запустить эксплойт' if is_exploit else 'Запустить проверку' }}
+      </button>
+      {% if is_exploit %}<a href="/active/msf/sessions" class="block text-center text-xs">Открытые сессии →</a>{% endif %}
+      {% if not targets %}<p class="text-xs muted">Нет утверждённых целей.</p>{% endif %}
+    </div>
+  </div>
+</form>
+{% endblock %}

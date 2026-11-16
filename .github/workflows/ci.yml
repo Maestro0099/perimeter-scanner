@@ -137,6 +137,12 @@ jobs:
           assert get("/reports/perimeter.pdf").content[:4] == b"%PDF"
           print("ok")
           PY
+      - name: Конфигурация профиля Metasploit валидна
+        run: |
+          echo "MSF_RPC_PASSWORD=ci-dummy-secret" >> .env
+          docker compose --profile msf config >/dev/null
+          test "$(docker compose config | grep -c perimeter-msf)" = "0"   # без профиля msf нет
+          docker compose --profile msf config | grep -q 'perimeter-msf'
       - name: Журнал приложения
         if: always()
         run: docker compose logs --no-color app | tail -80

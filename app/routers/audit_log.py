@@ -43,6 +43,7 @@ ACTION_LABELS = {
     "active_test_finding": "Находка активной проверки",
     "active_test_cancel": "Отмена активной проверки",
     "active_test_delete": "Удаление активной проверки",
+    "active_session_stop": "Закрытие сессии Metasploit",
 }
 
 
