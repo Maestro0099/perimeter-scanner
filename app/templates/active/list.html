@@ -22,7 +22,14 @@
       </select>
     </div>
     {% if user.is_admin %}
-    <a href="/active/hydra/new" class="btn-primary">{{ icon('key', 'h-4 w-4') }} Подбор учётных данных</a>
+    <div class="flex flex-wrap gap-2">
+      {% if hydra_on %}<a href="/active/hydra/new" class="btn-secondary">{{ icon('key', 'h-4 w-4') }} Подбор паролей</a>{% endif %}
+      {% if msf_on %}
+      <a href="/active/msf/new?kind=check" class="btn-secondary">{{ icon('shield', 'h-4 w-4') }} Проверка эксплуатируемости</a>
+      <a href="/active/msf/new?kind=exploit" class="btn-primary">{{ icon('bolt', 'h-4 w-4') }} Эксплуатация</a>
+      <a href="/active/msf/sessions" class="btn-ghost" title="Сессии Metasploit">{{ icon('crosshair', 'h-4 w-4') }}</a>
+      {% endif %}
+    </div>
     {% endif %}
   </div>
   <div class="table-wrap">
@@ -39,10 +46,17 @@
           <td class="font-mono text-xs">{{ t.asset }}{% if t.port %}:{{ t.port }}{% endif %}</td>
           <td class="text-xs muted">{{ t.service }}{% if t.params.get('attempts') %} · {{ t.params.attempts }} комб.{% endif %}</td>
           <td>{{ status_badge(t.status) }}</td>
-          <td data-value="{{ t.result.get('found_count', 0) if t.result else 0 }}">
+          <td data-value="{{ {'critical':5,'high':4,'medium':3,'low':2,'info':1}.get(t.severity,0) if t.status == 'done' else -1 }}">
             {% if t.status == 'done' and t.result %}
-              {% if t.result.get('found_count') %}<span class="sev-critical">{{ icon('key', 'h-3 w-3') }} найдено: {{ t.result.found_count }}</span>
-              {% else %}<span class="badge-green">слабых не найдено</span>{% endif %}
+              {% if t.kind == 'hydra' %}
+                {% if t.result.get('found_count') %}<span class="sev-critical">{{ icon('key', 'h-3 w-3') }} найдено: {{ t.result.found_count }}</span>
+                {% else %}<span class="badge-green">слабых не найдено</span>{% endif %}
+              {% elif t.kind == 'msf_check' %}
+                <span class="sev-{{ t.severity }}">{{ t.result.get('status', t.result.get('code', '—')) }}</span>
+              {% elif t.kind == 'msf_exploit' %}
+                {% if t.result.get('success') %}<span class="sev-critical">{{ icon('bolt', 'h-3 w-3') }} сессия получена</span>
+                {% else %}<span class="badge-neutral">без сессии</span>{% endif %}
+              {% endif %}
             {% else %}<span class="muted">—</span>{% endif %}
           </td>
           <td class="text-xs">{{ t.started_by }}</td>

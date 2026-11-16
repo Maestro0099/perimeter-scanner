@@ -99,6 +99,24 @@ def _check_authorization(authorization: str, confirm: bool, confirm_text: str) -
     return authorization
 
 
+def validate_active_target(db: Session, target_id: int):  # noqa: ANN201
+    """Проверяет цель активной проверки: существует, утверждена, в области, не подсеть.
+    Возвращает (Target, ValidatedTarget)."""
+    s = get_settings()
+    target = db.get(Target, target_id)
+    if target is None:
+        raise ActiveTestError("Цель не найдена")
+    if not target.approved:
+        raise ActiveTestError(f"Цель {target.value} не утверждена для проверки")
+    try:
+        validated = validate_in_scope(target.value, parse_scope(s.allowed_scope), s.max_cidr_hosts)
+    except ValidationError as exc:
+        raise ActiveTestError(str(exc)) from exc
+    if validated.kind.value == "cidr":
+        raise ActiveTestError("Активные проверки выполняются по одному адресу или домену, не по подсети")
+    return target, validated
+
+
 def create_hydra_test(
     db: Session,
     *,
@@ -125,17 +143,7 @@ def create_hydra_test(
         raise ActiveTestError("Выбран неподдерживаемый сервис")
     authorization = _check_authorization(authorization, confirm, confirm_text)
 
-    target = db.get(Target, target_id)
-    if target is None:
-        raise ActiveTestError("Цель не найдена")
-    if not target.approved:
-        raise ActiveTestError(f"Цель {target.value} не утверждена для проверки")
-    try:
-        validated = validate_in_scope(target.value, parse_scope(s.allowed_scope), s.max_cidr_hosts)
-    except ValidationError as exc:
-        raise ActiveTestError(str(exc)) from exc
-    if validated.kind.value == "cidr":
-        raise ActiveTestError("Активные проверки выполняются по одному адресу или домену, не по подсети")
+    target, validated = validate_active_target(db, target_id)
 
     port = int(port) if port else svc.default_port
     if not 1 <= port <= 65535:
@@ -255,11 +263,27 @@ class ActiveTestManager:
                 return True
         return ev is not None
 
+    def _job_for(self, test_id: int):  # noqa: ANN202
+        with session_scope() as db:
+            test = db.get(ActiveTest, test_id)
+            kind = test.kind if test else ""
+        if kind == ActiveTestKind.HYDRA.value:
+            return HydraJob
+        if kind in (ActiveTestKind.MSF_CHECK.value, ActiveTestKind.MSF_EXPLOIT.value):
+            from app.active.msf_engine import MsfJob
+
+            return MsfJob
+        return None
+
     def _run_safe(self, test_id: int) -> None:
         with self._lock:
             cancel = self._cancel.setdefault(test_id, threading.Event())
+        job_cls = self._job_for(test_id)
+        if job_cls is None:
+            _finish(test_id, ScanStatus.FAILED, "Неизвестный тип проверки")
+            return
         try:
-            HydraJob(test_id, cancel).run()
+            job_cls(test_id, cancel).run()
         except Exception:  # noqa: BLE001
             log.exception("Необработанная ошибка активной проверки #%s", test_id)
             _finish(test_id, ScanStatus.FAILED, "Внутренняя ошибка, подробности в журнале приложения")
@@ -411,4 +435,7 @@ def active_tests(db: Session) -> list[ActiveTest]:
     )
 
 
-__all__ = ["create_hydra_test", "active_test_manager", "ActiveTestError", "WORDLISTS", "wordlists_by_kind", "active_tests"]
+__all__ = [
+    "create_hydra_test", "active_test_manager", "ActiveTestError", "WORDLISTS",
+    "wordlists_by_kind", "active_tests", "validate_active_target", "_check_authorization",
+]

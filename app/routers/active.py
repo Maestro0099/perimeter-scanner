@@ -18,11 +18,13 @@ from app.active.engine import (
     wordlists_by_kind,
 )
 from app.active.hydra_runner import SERVICES, hydra_available
+from app.active.msf_client import msf_configured
+from app.active.msf_engine import MSF_CHECK_SUGGESTIONS, create_msf_test
 from app.audit import audit
 from app.auth import client_ip, current_user, require_admin
 from app.config import get_settings
 from app.db import get_db
-from app.models import ActiveTest, ScanStatus, Target, User
+from app.models import ActiveTest, ActiveTestKind, ScanStatus, Target, User
 from app.templating import render
 
 router = APIRouter()
@@ -45,7 +47,11 @@ def active_page(
 ) -> Response:
     _guard()
     tests = list(db.scalars(select(ActiveTest).order_by(ActiveTest.created_at.desc()).limit(300)))
-    return render(request, "active/list.html", {"tests": tests, "msg": msg, "err": err})
+    s = get_settings()
+    return render(request, "active/list.html", {
+        "tests": tests, "msg": msg, "err": err,
+        "hydra_on": s.hydra_enabled, "msf_on": s.msf_enabled,
+    })
 
 
 @router.get("/active/hydra/new")
@@ -115,9 +121,116 @@ async def hydra_start(request: Request, user: User = Depends(require_admin), db:
     return RedirectResponse(f"/active/{test.id}", status_code=303)
 
 
+@router.get("/active/msf/new")
+def msf_new(
+    request: Request, kind: str = "check", target: int | None = None, err: str = "",
+    user: User = Depends(require_admin), db: Session = Depends(get_db),
+) -> Response:
+    _guard()
+    s = get_settings()
+    if not s.msf_enabled:
+        raise HTTPException(404, "Metasploit отключён")
+    if kind not in ("check", "exploit"):
+        kind = "check"
+    targets = list(
+        db.scalars(select(Target).where(Target.approved.is_(True), Target.kind != "cidr").order_by(Target.kind, Target.value))
+    )
+    return render(
+        request,
+        "active/msf_new.html",
+        {
+            "kind": kind,
+            "targets": targets,
+            "suggestions": MSF_CHECK_SUGGESTIONS,
+            "msf_ready": msf_configured(),
+            "preselect_target": target,
+            "err": err,
+        },
+    )
+
+
+@router.post("/active/msf")
+async def msf_start(request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)) -> Response:
+    _guard()
+    form = await request.form()
+
+    def val(name: str, default: str = "") -> str:
+        v = form.get(name)
+        return v if isinstance(v, str) else default
+
+    kind_param = val("kind")
+    kind = ActiveTestKind.MSF_EXPLOIT.value if kind_param == "exploit" else ActiveTestKind.MSF_CHECK.value
+    try:
+        target_raw = val("target_id")
+        if not target_raw.isdigit():
+            raise ActiveTestError("Выберите цель")
+        port_raw = val("port")
+        test = create_msf_test(
+            db,
+            kind=kind,
+            target_id=int(target_raw),
+            module_type=val("module_type", "exploit"),
+            module_name=val("module_name"),
+            port=int(port_raw) if port_raw.isdigit() else None,
+            options_text=val("options"),
+            payload=val("payload"),
+            authorization=val("authorization"),
+            confirm=val("confirm") == "on",
+            confirm_text=val("confirm_text"),
+            username=user.username,
+            ip=client_ip(request),
+        )
+    except ActiveTestError as exc:
+        return _redirect(f"/active/msf/new?kind={kind_param or 'check'}", err=str(exc))
+    return RedirectResponse(f"/active/{test.id}", status_code=303)
+
+
 @router.get("/active/indicator")
 def active_indicator(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)) -> Response:
     return render(request, "active/_indicator.html", {"active": active_tests(db)})
+
+
+@router.get("/active/msf/sessions")
+def msf_sessions(
+    request: Request, msg: str = "", err: str = "", user: User = Depends(require_admin), db: Session = Depends(get_db)
+) -> Response:
+    _guard()
+    if not get_settings().msf_enabled:
+        raise HTTPException(404, "Metasploit отключён")
+    from app.active.msf_client import MsfError, client_from_settings
+
+    sessions: dict = {}
+    conn_err = ""
+    try:
+        client = client_from_settings()
+        try:
+            sessions = client.session_list()
+        finally:
+            client.close()
+    except MsfError as exc:
+        conn_err = str(exc)
+    return render(request, "active/sessions.html", {"sessions": sessions, "conn_err": conn_err, "msg": msg, "err": err})
+
+
+@router.post("/active/msf/sessions/{session_id}/stop")
+def msf_session_stop(
+    request: Request, session_id: str, user: User = Depends(require_admin), db: Session = Depends(get_db)
+) -> Response:
+    _guard()
+    from app.active.msf_client import MsfError, client_from_settings
+
+    if not session_id.isdigit():
+        raise HTTPException(400, "Некорректный идентификатор сессии")
+    try:
+        client = client_from_settings()
+        try:
+            client.session_stop(session_id)
+        finally:
+            client.close()
+    except MsfError as exc:
+        return _redirect("/active/msf/sessions", err=str(exc))
+    audit(db, "active_session_stop", f"Сессия Metasploit {session_id} закрыта", username=user.username, ip=client_ip(request))
+    return _redirect("/active/msf/sessions", msg=f"Сессия {session_id} закрыта")
 
 
 @router.get("/active/{test_id}")
