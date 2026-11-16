@@ -53,8 +53,16 @@ services:
     container_name: perimeter-msf
     profiles: ["msf"]
     restart: unless-stopped
-    # msfrpcd слушает RPC по TLS (самоподписанный) внутри сети Docker
-    command: ["./msfrpcd", "-U", "msf", "-P", "${MSF_RPC_PASSWORD:?нужен MSF_RPC_PASSWORD в .env}", "-a", "0.0.0.0", "-p", "55553", "-f"]
+    environment:
+      # Пустое значение по умолчанию, чтобы `docker compose up` без профиля msf
+      # (когда этот контейнер не запускается) не падал на интерполяции.
+      MSF_RPC_PASSWORD: ${MSF_RPC_PASSWORD:-}
+    # msfrpcd слушает RPC по TLS (самоподписанный) внутри сети Docker.
+    # Пароль обязателен только при фактическом запуске профиля msf.
+    command:
+      - sh
+      - -c
+      - 'test -n "$$MSF_RPC_PASSWORD" || { echo "Задайте MSF_RPC_PASSWORD в .env перед запуском профиля msf" >&2; exit 1; }; exec ./msfrpcd -U msf -P "$$MSF_RPC_PASSWORD" -a 0.0.0.0 -p 55553 -f'
     expose:
       - "55553"
     # Эксплойт-модулям могут понадобиться сырые сокеты; наружу контейнер не открыт.
