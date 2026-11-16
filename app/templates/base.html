@@ -39,6 +39,7 @@
       {{ nav('/assets/domain', 'Домены', 'globe') }}
       {{ nav('/findings', 'Находки', 'alert') }}
       {{ nav('/changes', 'Изменения', 'diff') }}
+      {% if active_tests_enabled %}{{ nav('/active', 'Активные проверки', 'crosshair') }}{% endif %}
       {{ nav('/reports', 'Отчёты', 'doc') }}
       {% if user and user.is_admin %}
       <div class="nav-section">Администрирование</div>
@@ -78,6 +79,7 @@
         <h1 class="truncate">{{ self.title() }}</h1>
       </div>
       <div id="scan-indicator" hx-get="/scans/indicator" hx-trigger="load, every 5s" hx-swap="innerHTML"></div>
+      {% if active_tests_enabled %}<div id="active-indicator" hx-get="/active/indicator" hx-trigger="load, every 5s" hx-swap="innerHTML"></div>{% endif %}
       <button type="button" data-theme-toggle class="btn-ghost" title="Сменить тему" aria-label="Сменить тему">
         <span class="dark:hidden">{{ icon('moon') }}</span><span class="hidden dark:inline">{{ icon('sun') }}</span>
       </button>

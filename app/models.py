@@ -364,3 +364,65 @@ class AppSetting(Base):
 
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[str] = mapped_column(Text, default="")
+
+
+# --------------------------------------------------------------------------- активные проверки
+
+
+class ActiveTestKind(str, enum.Enum):
+    HYDRA = "hydra"
+    MSF_CHECK = "msf_check"
+    MSF_EXPLOIT = "msf_exploit"
+
+
+ACTIVE_TEST_LABELS: dict[str, str] = {
+    "hydra": "Подбор учётных данных (Hydra)",
+    "msf_check": "Проверка эксплуатируемости (Metasploit)",
+    "msf_exploit": "Эксплуатация (Metasploit)",
+}
+
+
+class ActiveTest(Base):
+    """Активная проверка: запускается только вручную администратором, по одной цели,
+    с явным подтверждением и указанием основания. Не запускается по расписанию."""
+
+    __tablename__ = "active_tests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), index=True)
+    status: Mapped[str] = mapped_column(String(16), default=ScanStatus.QUEUED.value, index=True)
+    progress: Mapped[float] = mapped_column(Float, default=0.0)
+    stage: Mapped[str] = mapped_column(String(160), default="В очереди")
+
+    target_id: Mapped[int | None] = mapped_column(ForeignKey("targets.id", ondelete="SET NULL"), nullable=True)
+    asset: Mapped[str] = mapped_column(String(255), index=True)
+    port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    protocol: Mapped[str] = mapped_column(String(8), default="tcp")
+    # для hydra — имя сервиса; для msf — путь модуля
+    service: Mapped[str] = mapped_column(String(255), default="")
+    params: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    # обязательное основание (разрешение / номер заявки) — пишется и в аудит
+    authorization: Mapped[str] = mapped_column(Text, default="")
+    started_by: Mapped[str] = mapped_column(String(64), default="")
+    ip: Mapped[str] = mapped_column(String(64), default="")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    error: Mapped[str] = mapped_column(Text, default="")
+    command: Mapped[str] = mapped_column(Text, default="")
+    result: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    severity: Mapped[str] = mapped_column(String(10), default="info")
+
+    target: Mapped[Target | None] = relationship()
+
+    @property
+    def is_active(self) -> bool:
+        return self.status in (ScanStatus.QUEUED.value, ScanStatus.RUNNING.value)
+
+    @property
+    def duration_seconds(self) -> int | None:
+        if self.started_at and self.finished_at:
+            return int((self.finished_at - self.started_at).total_seconds())
+        return None

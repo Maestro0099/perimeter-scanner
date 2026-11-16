@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon, flash, csrf_input %}
+{% block title %}Подбор учётных данных{% endblock %}
+{% block breadcrumbs %}<a href="/active" class="text-xs muted">← Активные проверки</a>{% endblock %}
+{% block content %}
+{{ flash('', err) }}
+{% if not hydra_ok %}<div class="alert-error mb-4">Hydra не найдена в системе. Установите пакет <code>hydra</code> или используйте Docker-образ.</div>{% endif %}
+
+<div class="card sev-border-critical mb-6">
+  <div class="card-body flex items-start gap-3 text-sm">
+    {{ icon('alert', 'h-6 w-6 shrink-0 text-rose-500') }}
+    <div class="space-y-1">
+      <b>Проверка воздействует на реальный сервис.</b>
+      <ul class="list-disc space-y-0.5 pl-5 text-slate-600 dark:text-slate-400">
+        <li>Подбор пароля может <b>заблокировать учётные записи</b> из-за политики блокировки — вплоть до отказа в обслуживании (почта, VPN, порталы).</li>
+        <li>Проводите только по согласованию с владельцами систем и в согласованное окно. Рекомендуется заранее завести тестовую учётную запись.</li>
+        <li>Словари намеренно короткие — цель найти <b>слабые и дефолтные</b> пароли, а не перебрать всё.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<form method="post" action="/active/hydra" class="grid gap-6 lg:grid-cols-3" id="hydra-form">
+  {{ csrf_input(request) }}
+  <div class="space-y-6 lg:col-span-2">
+    <div class="card">
+      <div class="card-header"><h2>Цель и сервис</h2></div>
+      <div class="card-body space-y-4">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="label" for="target_id">Цель (только утверждённые)</label>
+            <select id="target_id" name="target_id" class="input font-mono" required>
+              <option value="">— выберите —</option>
+              {% for t in targets %}<option value="{{ t.id }}" {{ 'selected' if preselect_target == t.id }}>{{ t.value }} ({{ KIND_LABELS[t.kind] }})</option>{% endfor %}
+            </select>
+            <p class="mt-1 text-xs muted">Один адрес или домен. Подсети недоступны.</p>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <div class="col-span-2">
+              <label class="label" for="service">Сервис</label>
+              <select id="service" name="service" class="input" required data-hydra-service>
+                {% for key, svc in services.items() %}<option value="{{ key }}" data-port="{{ svc.default_port }}" data-form="{{ '1' if svc.needs_module_option else '' }}">{{ svc.label }}</option>{% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="label" for="port">Порт</label>
+              <input id="port" name="port" class="input font-mono" inputmode="numeric" data-hydra-port>
+            </div>
+          </div>
+        </div>
+        <div data-hydra-form-opt hidden>
+          <label class="label" for="module_option">Параметры формы входа (http-post-form)</label>
+          <input id="module_option" name="module_option" class="input font-mono" maxlength="512"
+                 placeholder="/login:user=^USER^&pass=^PASS^:F=Неверный">
+          <p class="mt-1 text-xs muted">Путь, тело запроса с метками <code>^USER^</code>/<code>^PASS^</code> и признак неуспеха (<code>F=</code>) или успеха (<code>S=</code>), разделённые двоеточием.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Словари</h2></div>
+      <div class="card-body space-y-4">
+        <div class="grid gap-4 sm:grid-cols-2" data-hydra-pair>
+          <div>
+            <label class="label" for="login_list">Логины</label>
+            <select id="login_list" name="login_list" class="input">
+              {% for w in login_lists %}<option value="{{ w.key }}">{{ w.label }} ({{ w.count }})</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="label" for="password_list">Пароли</label>
+            <select id="password_list" name="password_list" class="input">
+              {% for w in password_lists %}<option value="{{ w.key }}">{{ w.label }} ({{ w.count }})</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <label class="flex items-center gap-2 text-sm">
+          <input type="checkbox" class="checkbox" data-hydra-combo-toggle> Вместо этого — готовые пары логин:пароль по умолчанию
+        </label>
+        <div data-hydra-combo hidden>
+          <label class="label" for="combo_list">Пары логин:пароль</label>
+          <select id="combo_list" name="combo_list" class="input" disabled>
+            <option value="">—</option>
+            {% for w in combo_lists %}<option value="{{ w.key }}">{{ w.label }} ({{ w.count }})</option>{% endfor %}
+          </select>
+        </div>
+        <p class="text-xs muted">Максимум комбинаций за запуск: {{ max_attempts }}. При превышении запуск будет отклонён.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header"><h2>Скорость</h2></div>
+      <div class="card-body space-y-3">
+        <div>
+          <label class="label" for="tasks">Параллельных попыток (-t)</label>
+          <input id="tasks" name="tasks" type="number" min="1" max="{{ max_tasks }}" value="{{ default_tasks }}" class="input">
+          <p class="mt-1 text-xs muted">Меньше — медленнее и мягче для цели. Максимум {{ max_tasks }}.</p>
+        </div>
+        <label class="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="stop_on_first" class="checkbox" checked> Остановиться на первой найденной паре
+        </label>
+      </div>
+    </div>
+
+    <div class="card sev-border-high" id="confirm">
+      <div class="card-header"><h2>Подтверждение запуска</h2></div>
+      <div class="card-body space-y-3">
+        <div>
+          <label class="label" for="authorization">Основание (разрешение, номер заявки) <span class="text-rose-500">*</span></label>
+          <textarea id="authorization" name="authorization" rows="2" class="input" required maxlength="1000"
+                    placeholder="Напр.: заявка PENTEST-142, согласовано с владельцем сервиса"></textarea>
+          <p class="mt-1 text-xs muted">Будет записано в журнал аудита.</p>
+        </div>
+        <label class="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="confirm" class="checkbox mt-0.5"> Я согласовал проверку с владельцами систем и понимаю риск блокировки учётных записей
+        </label>
+        <div>
+          <label class="label" for="confirm_text">Введите «ПОДТВЕРЖДАЮ»</label>
+          <input id="confirm_text" name="confirm_text" class="input" autocomplete="off">
+        </div>
+        <button class="btn-primary w-full py-2.5" {{ 'disabled' if not targets or not hydra_ok }}>{{ icon('key', 'h-4 w-4') }} Запустить подбор</button>
+        {% if not targets %}<p class="text-xs muted">Нет утверждённых целей (IP или доменов).</p>{% endif %}
+      </div>
+    </div>
+  </div>
+</form>
+{% endblock %}

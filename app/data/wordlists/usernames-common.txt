@@ -1,0 +1,24 @@
+# Распространённые имена учётных записей для поиска слабых/дефолтных паролей.
+root
+admin
+administrator
+user
+test
+guest
+operator
+oracle
+postgres
+postgresql
+mysql
+sa
+ftp
+ftpuser
+www
+www-data
+web
+backup
+support
+service
+manager
+sysadmin
+system

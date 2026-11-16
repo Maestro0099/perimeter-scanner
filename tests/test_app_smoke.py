@@ -173,3 +173,61 @@ def test_password_change_drops_other_sessions(client: TestClient) -> None:
     assert "Пароль изменён" in r.text
     with dbmod.session_scope() as db:
         assert db.query(UserSession).count() == 1
+
+
+def test_active_tests_access_control(client: TestClient, monkeypatch) -> None:
+    from app.active import engine
+
+    monkeypatch.setattr(engine.active_test_manager, "submit", lambda tid: None)
+    _login(client)
+    # добавим утверждённую цель
+    token = _csrf(client, "/targets")
+    client.post("/targets", data={"values": "203.0.113.50", "csrf_token": token})
+    # админ видит список и форму
+    assert client.get("/active").status_code == 200
+    assert "Подбор учётных данных" in client.get("/active/hydra/new").text
+    # запуск без подтверждения отклоняется
+    token = _csrf(client, "/active/hydra/new")
+    tid = next(iter(client.get("/targets").text.split('value="')[1:]), "")
+    r = client.post("/active/hydra", data={"target_id": "1", "service": "ssh", "login_list": "users-common",
+                                           "password_list": "pass-weak", "authorization": "заявка-1",
+                                           "csrf_token": token}, follow_redirects=True)
+    assert "ПОДТВЕРЖДАЮ" in r.text
+    # нормальный запуск создаёт проверку
+    r = client.post("/active/hydra", data={"target_id": "1", "service": "ssh", "login_list": "users-common",
+                                           "password_list": "pass-weak", "authorization": "заявка-1",
+                                           "confirm": "on", "confirm_text": "ПОДТВЕРЖДАЮ", "csrf_token": token},
+                    follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].startswith("/active/")
+
+    # viewer не может открыть форму и запускать
+    token = _csrf(client, "/users")
+    client.post("/users", data={"username": "viewer9", "password": "Viewer-Password-9", "role": "viewer", "csrf_token": token})
+    client.post("/logout", data={"csrf_token": token})
+    client.cookies.clear()
+    _login(client, "viewer9", "Viewer-Password-9")
+    assert client.get("/active").status_code == 200  # просмотр разрешён
+    assert client.get("/active/hydra/new").status_code == 403
+    token = _csrf(client, "/active")
+    assert client.post("/active/hydra", data={"target_id": "1", "service": "ssh", "csrf_token": token}).status_code == 403
+
+
+def test_active_tests_can_be_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("ACTIVE_TESTS_ENABLED", "false")
+    monkeypatch.setenv("ADMIN_PASSWORD", "Test-Password-123")
+    from app import db as dbmod
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    dbmod.init_engine()
+    from app.main import create_app
+
+    with TestClient(create_app()) as c:
+        html = c.get("/login")
+        import re as _re
+
+        tok = _re.search(r'name="csrf_token" value="([^"]+)"', html.text).group(1)
+        c.post("/login", data={"username": "admin", "password": "Test-Password-123", "csrf_token": tok})
+        assert c.get("/active").status_code == 404
+        assert "Активные проверки" not in c.get("/").text
+    get_settings.cache_clear()

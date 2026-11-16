@@ -51,6 +51,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     from app.scanner.engine import scan_manager
 
     scan_manager.start()
+    from app.active.engine import active_test_manager
+
+    active_test_manager.start()
     from app.scheduler import start_scheduler, stop_scheduler
 
     start_scheduler()
@@ -58,6 +61,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         stop_scheduler()
+        active_test_manager.shutdown()
         scan_manager.shutdown()
 
 
@@ -74,6 +78,7 @@ def create_app() -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
     from app.routers import (
+        active,
         assets,
         audit_log,
         auth,
@@ -87,19 +92,10 @@ def create_app() -> FastAPI:
         users,
     )
 
-    for module in (
-        auth,
-        dashboard,
-        targets,
-        scans,
-        assets,
-        findings,
-        reports,
-        schedules,
-        settings_page,
-        users,
-        audit_log,
-    ):
+    modules = [auth, dashboard, targets, scans, assets, findings, reports, schedules, settings_page, users, audit_log]
+    if get_settings().active_tests_enabled:
+        modules.insert(4, active)
+    for module in modules:
         app.include_router(module.router)
 
     @app.exception_handler(LoginRequired)

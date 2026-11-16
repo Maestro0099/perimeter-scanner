@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon, csrf_input, sev_badge %}
+{% block title %}Проверка #{{ test.id }}{% endblock %}
+{% block breadcrumbs %}<a href="/active" class="text-xs muted">← Активные проверки</a>{% endblock %}
+{% block content %}
+<div class="grid gap-6 lg:grid-cols-3">
+  <div class="card lg:col-span-2">
+    <div class="card-header">
+      <h2>{{ ACTIVE_TEST_LABELS.get(test.kind, test.kind) }} · #{{ test.id }}</h2>
+      {% if user.is_admin %}
+      <div class="flex gap-2">
+        {% if test.is_active %}
+        <form method="post" action="/active/{{ test.id }}/cancel" data-confirm-submit="Отменить проверку?">{{ csrf_input(request) }}<button class="btn-secondary btn-sm">Отменить</button></form>
+        {% else %}
+        <form method="post" action="/active/{{ test.id }}/delete" data-confirm-submit="Удалить проверку #{{ test.id }}?">{{ csrf_input(request) }}<button class="btn-ghost btn-sm text-rose-600">{{ icon('trash', 'h-4 w-4') }}</button></form>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    <div class="card-body">{% include "active/_progress.html" %}</div>
+  </div>
+  <div class="card card-body text-sm">
+    <dl class="grid grid-cols-3 gap-y-1.5">
+      <dt class="muted">Цель</dt><dd class="col-span-2 font-mono">{{ test.asset }}{% if test.port %}:{{ test.port }}{% endif %}</dd>
+      <dt class="muted">Сервис</dt><dd class="col-span-2">{{ services[test.service].label if test.service in services else test.service }}</dd>
+      <dt class="muted">Запустил</dt><dd class="col-span-2">{{ test.started_by }}</dd>
+      <dt class="muted">Начато</dt><dd class="col-span-2">{{ test.started_at|dt }}</dd>
+      <dt class="muted">Окончено</dt><dd class="col-span-2">{{ test.finished_at|dt }}</dd>
+      <dt class="muted">Длительность</dt><dd class="col-span-2">{{ test.duration_seconds|duration }}</dd>
+      {% if test.params.get('attempts') %}<dt class="muted">Комбинаций</dt><dd class="col-span-2">{{ test.params.attempts }}</dd>{% endif %}
+    </dl>
+  </div>
+</div>
+
+<div class="card mt-6">
+  <div class="card-header"><h2>Основание</h2></div>
+  <div class="card-body text-sm">{{ test.authorization or '—' }}</div>
+</div>
+
+{% if not test.is_active and test.status == 'done' %}
+{% set found = test.result.get('found', []) if test.result else [] %}
+<div class="card mt-6 {{ 'sev-border-critical' if found else 'sev-border-info' }}">
+  <div class="card-header">
+    <h2>Результат</h2>
+    {% if found %}<span class="sev-critical">{{ icon('key', 'h-3 w-3') }} найдено слабых учётных данных: {{ found|length }}</span>
+    {% else %}<span class="badge-green">слабых учётных данных не обнаружено</span>{% endif %}
+  </div>
+  {% if found %}
+  <div class="card-body">
+    <div class="alert-error mb-3 text-sm">Обнаружены работающие учётные данные. Немедленно смените пароли и ограничьте доступ к сервису.</div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Логин</th><th>Пароль</th></tr></thead>
+        <tbody>
+          {% for c in found %}<tr><td class="font-mono">{{ c.login }}</td><td class="font-mono font-semibold text-rose-600 dark:text-rose-400">{{ c.password }}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+  {% if test.result and test.result.get('errors') %}
+  <div class="border-t border-slate-200 px-4 py-3 text-xs dark:border-slate-800"><div class="label">Сообщения Hydra</div>{% for e in test.result.errors %}<div class="muted">{{ e }}</div>{% endfor %}</div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if user.is_admin and test.command %}
+<details class="card card-body mt-6 text-xs">
+  <summary class="cursor-pointer font-medium">Команда</summary>
+  <pre class="pre mt-2">{{ test.command }}</pre>
+</details>
+{% endif %}
+{% endblock %}

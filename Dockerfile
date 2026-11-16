@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # nmap + библиотеки для WeasyPrint (PDF) + шрифты с кириллицей + libcap для setcap
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      nmap libcap2-bin ca-certificates tzdata \
+      nmap hydra libcap2-bin ca-certificates tzdata \
       libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b fonts-dejavu-core \
  && rm -rf /var/lib/apt/lists/* \
  # nmap получает только NET_RAW/NET_ADMIN (для SYN/UDP-сканирования и -O);

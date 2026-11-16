@@ -11,6 +11,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.config import BASE_DIR, get_settings
 from app.analysis.severity import SEVERITY_LABELS, SEVERITY_ORDER_LIST
+from app.models import ACTIVE_TEST_LABELS
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
@@ -97,13 +98,17 @@ templates.env.globals.update(
     KIND_LABELS=KIND_LABELS,
     CATEGORY_LABELS=CATEGORY_LABELS,
     CHANGE_LABELS=CHANGE_LABELS,
+    ACTIVE_TEST_LABELS=ACTIVE_TEST_LABELS,
     plural=plural,
     csrf_token=csrf_token,
 )
 
 
 def render(request: Request, name: str, context: dict[str, Any] | None = None, status_code: int = 200):  # type: ignore[no-untyped-def]
-    ctx: dict[str, Any] = {"user": getattr(request.state, "user", None)}
+    ctx: dict[str, Any] = {
+        "user": getattr(request.state, "user", None),
+        "active_tests_enabled": get_settings().active_tests_enabled,
+    }
     if context:
         ctx.update(context)
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)
