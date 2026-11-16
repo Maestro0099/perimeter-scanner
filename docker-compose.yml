@@ -49,7 +49,7 @@ services:
   # НЕ публикуется на хост. Для активации также задайте в .env:
   #   MSF_ENABLED=true  и  MSF_RPC_PASSWORD=<длинный секрет>
   msf:
-    image: metasploitframework/metasploit-framework:6.4.44
+    image: metasploitframework/metasploit-framework:6.5.10
     container_name: perimeter-msf
     profiles: ["msf"]
     restart: unless-stopped
@@ -62,7 +62,7 @@ services:
     command:
       - sh
       - -c
-      - 'test -n "$$MSF_RPC_PASSWORD" || { echo "Задайте MSF_RPC_PASSWORD в .env перед запуском профиля msf" >&2; exit 1; }; exec ./msfrpcd -U msf -P "$$MSF_RPC_PASSWORD" -a 0.0.0.0 -p 55553 -f'
+      - 'test -n "$$MSF_RPC_PASSWORD" || { echo "Задайте MSF_RPC_PASSWORD в .env перед запуском профиля msf" >&2; exit 1; }; BIN="$$(command -v msfrpcd || echo ./msfrpcd)"; exec "$$BIN" -U msf -P "$$MSF_RPC_PASSWORD" -a 0.0.0.0 -p 55553 -f'
     expose:
       - "55553"
     # Эксплойт-модулям могут понадобиться сырые сокеты; наружу контейнер не открыт.
